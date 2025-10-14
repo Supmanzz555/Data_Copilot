@@ -201,6 +201,12 @@ docker-compose up
 
 **Note**: Replace `your_groq_api_key_here` in `.env` with your actual Groq API key before starting the application.
 
+## Things that should be added in the future
+-  Proper CI/CD pipeline
+-  Observability
+-  rate limits, circuit breakers etc
+-  **basically the good structure of MLops system**
+
 ## Contribute
 Yes! and feels free to do so!
 
