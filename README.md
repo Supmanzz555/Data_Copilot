@@ -197,3 +197,6 @@ docker-compose up
 
 **Note**: Replace `your_groq_api_key_here` in `.env` with your actual Groq API key before starting the application.
 
+## Contribute
+Yes! and feels free to do so!
+
