@@ -2,6 +2,9 @@
 
 > AI-powered support system for dBank's Operation team 
 
+## note
+all of the data showing in this project is mocking up there is no REAL dBank or real customer database in this 
+
 ## 📋 Overview
 
 The Deep Insights Copilot is an intelligent system designed to:
