@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+psycopg2-binary
+sqlalchemy
+pgvector
+groq
+sentence-transformers
+dbt-core
+pandas
+faker
+python-dotenv
+pydantic==1.10.12
+SQLAlchemy>=2.0
+asyncpg
+

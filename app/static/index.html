@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deep Insights Copilot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9fafb;
+      padding: 40px;
+      max-width: 900px;
+      margin: auto;
+    }
+    h1 { color: #1f2937; }
+    textarea {
+      width: 100%;
+      height: 120px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 15px;
+      resize: none;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button:hover { background-color: #1d4ed8; }
+    #response {
+      margin-top: 25px;
+      padding: 15px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      min-height: 100px;
+    }
+    .answer-text {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #1f2937;
+      margin-bottom: 15px;
+      white-space: pre-wrap;
+    }
+    .section-header {
+      font-weight: bold;
+      color: #374151;
+      margin-top: 15px;
+      margin-bottom: 8px;
+    }
+    .sql-box {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: #1f2937;
+      overflow-x: auto;
+      margin-bottom: 15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    th {
+      background: #2563eb;
+      color: white;
+      padding: 10px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    tr:hover {
+      background: #f9fafb;
+    }
+    .record-count {
+      color: #6b7280;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    .json-toggle {
+      color: #2563eb;
+      cursor: pointer;
+      text-decoration: underline;
+      font-size: 13px;
+      margin-left: 10px;
+    }
+    .json-data {
+      display: none;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <h1>Deep Insights Copilot</h1>
+  <p>Ask any business question grounded in dBank data or documents:</p>
+  <textarea id="question" placeholder="Example: Top 5 root causes of product issues last month..."></textarea>
+  <br>
+  <button onclick="askCopilot()">Ask Copilot</button>
+  <div id="response"></div>
+
+  <script>
+    function renderTable(data) {
+      if (!data || data.length === 0) return '';
+      
+      const columns = Object.keys(data[0]);
+      let tableHTML = '<table>';
+      
+      // Header
+      tableHTML += '<thead><tr>';
+      columns.forEach(col => {
+        tableHTML += `<th>${col}</th>`;
+      });
+      tableHTML += '</tr></thead>';
+      
+      // Body
+      tableHTML += '<tbody>';
+      data.forEach(row => {
+        tableHTML += '<tr>';
+        columns.forEach(col => {
+          let value = row[col];
+          // Truncate long values
+          if (typeof value === 'string' && value.length > 100) {
+            value = value.substring(0, 97) + '...';
+          }
+          tableHTML += `<td>${value !== null && value !== undefined ? value : ''}</td>`;
+        });
+        tableHTML += '</tr>';
+      });
+      tableHTML += '</tbody></table>';
+      
+      return tableHTML;
+    }
+
+    function toggleJSON(id) {
+      const elem = document.getElementById(id);
+      elem.style.display = elem.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function askCopilot() {
+      const question = document.getElementById("question").value.trim();
+      if (!question) return alert("Please type your question first.");
+
+      document.getElementById("response").innerHTML = "Thinking...";
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        
+        // Build HTML output
+        let html = "";
+        
+        // Natural language answer
+        if (data.answer) {
+          html += `<div class="answer-text">💬 ${data.answer}</div>`;
+        }
+        
+        // Technical details (if not conversational)
+        if (data.tool_used !== "conversational") {
+          html += `<div class="section-header">🔧 Tool Used: ${data.tool_used}</div>`;
+          
+          // SQL Command (highlighted box)
+          if (data.generated_sql) {
+            html += `<div class="section-header">📝 Generated SQL:</div>`;
+            html += `<div class="sql-box">${data.generated_sql}</div>`;
+          }
+          
+          // Data as Table
+          if (data.data && data.data.length > 0) {
+            html += `<div class="section-header">📊 Results:`;
+            html += `<span class="record-count">(${data.data.length} record${data.data.length > 1 ? 's' : ''})</span>`;
+            html += `<span class="json-toggle" onclick="toggleJSON('rawJson')">Show Raw JSON</span>`;
+            html += `</div>`;
+            
+            // Render table
+            html += renderTable(data.data);
+            
+            // Raw JSON (hidden by default)
+            html += `<div id="rawJson" class="json-data">${JSON.stringify(data.data, null, 2)}</div>`;
+          } else if (data.data && data.data.length === 0) {
+            html += `<div class="section-header">📊 Results: <span class="record-count">(0 records)</span></div>`;
+          }
+        }
+        
+        // Error handling
+        if (data.error) {
+          html += `<div style="color: #dc2626; margin-top: 10px;">❌ Error: ${data.error}</div>`;
+        }
+        
+        document.getElementById("response").innerHTML = html;
+      } catch (err) {
+        document.getElementById("response").innerHTML = `<div style="color: #dc2626;">❌ Error: ${err}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
+
