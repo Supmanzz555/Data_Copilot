@@ -20,7 +20,8 @@ The Deep Insights Copilot is an intelligent system designed to:
 - Data quality tests
 
 ### 2. **Retrieval Layer**
-- Vector store using pgvector
+- Vector store using [pgvector](https://github.com/pgvector/pgvector?tab=readme-ov-file#docker) (which is best if you use docker image version)
+
 - Knowledge base with 9 markdown documents
 - Semantic search capabilities
 
