@@ -1,74 +1,90 @@
-# TODO: dBank_Copilot - Completed
+# TODO: dBank_Copilot - Implementation Tasks
 
-## ✅ Status: All Tasks Complete
+## ✅ Completed Tasks
 
-All planned improvements have been implemented.
+### Backend Improvements
+- [x] Add database indexes on frequently queried columns
+- [x] Add config validation for required API keys
+- [x] Harden SQL generation reliability
+- [x] Update FK delete behavior with ON DELETE CASCADE
+- [x] DB engine unification (sync + async)
+- [x] Improve embedding-path validation
+- [x] Remove hardcoded credentials defaults
+- [x] Add app health check in docker-compose
+- [x] Keep debug SQL logging disabled by default
+- [x] Upgrade to Pydantic v2
 
----
+### Frontend
+- [x] Vue 3 responsive frontend with dark mode
+- [x] Modern minimal UI design
+- [x] Message animations
+- [x] Mobile responsive design
 
-### Completed Tasks
+### Security & Performance
+- [x] Rate limiting on /ask endpoint (10/min)
+- [x] Connection pooling with pool_size, max_overflow
+- [x] Query timeout (30 seconds)
+- [x] Configurable similarity threshold
+- [x] SQL sanitization
 
-#### High Priority
-- [x] 1. Add database indexes on frequently queried columns
-- [x] 2. Add config validation for required API keys (`GROQ_API_KEY`, `JINA_API_KEY`)
-- [x] 3. Harden SQL generation reliability in `app/routes/ask.py` (prompt constraints + sanitizer + tests)
-
-#### Medium Priority
-- [x] 4. Update FK delete behavior safely (no duplicate constraints; edit existing FK definitions)
-- [x] 5. Optional DB engine unification refactor (sync + async)
-- [x] 6. Improve embedding-path validation/fallback (length checks + resilient fallback)
-
-#### Low Priority
-- [x] 7. Remove hardcoded credentials defaults and rely on env vars
-- [x] 8. Add app health check in `docker-compose.yml`
-- [x] 9. Run dbt in separate CI/job (not app startup)
-- [x] 10. Add rate limiting on `/ask` endpoint
-- [x] 11. Keep debug SQL logging disabled by default in production
-- [x] 12. Upgrade to Pydantic v2 as a separate migration track
-- [x] 13. Modern Vue 3 frontend with dark mode support
-
----
-
-## 📚 Documentation
-
-For full documentation, maintenance guide, and development notes, see:
-
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Complete project guide
-- **[PLAN.md](./PLAN.md)** - Original implementation plan
-- **[README.md](./README.md)** - Original project overview
+### Documentation
+- [x] README.md - Complete project overview
+- [x] DEVELOPMENT.md - Development guide
+- [x] note.md - Quick summary
+- [x] MLOPS_PLAN.md - MLOps implementation plan
 
 ---
 
-## 🚀 Quick Reference
+## 📋 MLOps Implementation Plan (Pending)
 
-### Start the project
+See [MLOPS_PLAN.md](./MLOPS_PLAN.md) for detailed implementation steps.
+
+### Phase 1: Observability
+- [ ] Add `/metrics` endpoint with Prometheus client
+- [ ] Create `app/metrics.py` with metric definitions
+- [ ] Update `app/main.py` to include metrics router
+
+### Phase 2: Monitoring Stack
+- [ ] Update `docker-compose.yml` with monitoring services
+  - [ ] prometheus (metrics collection)
+  - [ ] grafana (dashboards)
+  - [ ] uptime-kuma (external monitoring)
+- [ ] Create `prometheus.yml` config
+- [ ] Add `request_logs` table to `schema.sql`
+
+### Phase 3: Dashboards & Alerts
+- [ ] Setup Grafana dashboards
+- [ ] Configure alert rules
+- [ ] Setup Uptime Kuma
+
+### Phase 4: CI/CD
+- [ ] Create `.github/workflows/ci.yml`
+- [ ] Add security scanning (bandit, safety)
+- [ ] Add Docker build step
+
+---
+
+## Quick Reference
+
+### Start Project
 ```bash
 docker-compose up --build
-# Open http://localhost:8000
 ```
 
-### Run tests
+### Run Tests
 ```bash
 source bank/bin/activate
 pytest test_plan_updates_unit.py -v
 ```
 
-### API endpoints
-- `POST /ask` - Ask a question
-- `GET /tools/list` - List available tools
-- `POST /tools/call` - Call a tool directly
-
-### Key files
+### Key Files
 | File | Purpose |
 |------|---------|
 | `app/main.py` | FastAPI entry point |
-| `app/config.py` | Configuration settings |
-| `app/database.py` | Unified DB engine |
+| `app/metrics.py` | Metrics (to be created) |
 | `app/routes/ask.py` | Question answering |
-| `app/mcp_tools.py` | Database tools |
-| `app/static/index.html` | Vue 3 frontend |
-| `app/schema.sql` | DB schema + indexes |
-| `docker-compose.yml` | Container config |
+| `docker-compose.yml` | Container orchestration |
+| `MLOPS_PLAN.md` | MLOps implementation guide |
 
 ---
 
