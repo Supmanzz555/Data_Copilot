@@ -1,10 +1,9 @@
 import random, datetime
 from faker import Faker
-from sqlalchemy import create_engine, text
-from app.config import settings
+from sqlalchemy import text
+from app.database import engine
 
 fake = Faker()
-engine = create_engine(settings.DATABASE_URL)
 
 def generate_mock_data():
     with engine.begin() as conn:

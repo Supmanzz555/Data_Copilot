@@ -1,113 +1,92 @@
 """
-KB loader with HEADING-AWARE chunking & LOCAL embeddings
-Uses sentence-transformers (runs locally, no API needed)
-Chunks by markdown sections (##) to preserve context
-Meets requirement: "Chunk & embed docs into a vector store (pgvector)"
+KB loader with heading-aware chunking and Jina Embeddings API (remote).
+Chunks by markdown sections (##); embeddings are computed via HTTPS, not on the host CPU/GPU.
 """
 import os
-from sqlalchemy import create_engine, text
-from sentence_transformers import SentenceTransformer
+from sqlalchemy import text
+
+from app.database import engine
+from app.jina_client import embed_texts_sync
 
 KB_DIR = os.path.join(os.path.dirname(__file__), "kb_docs")
 
-# model instance
-_model = None
+# Batch size for API calls (many small chunks per request is fine; cap payload size)
+_EMBED_BATCH_SIZE = 32
 
-def get_embedding_model():
-    """Load lightweight local embedding model (384 dimensions, ~22MB)"""
-    global _model
-    if _model is None:
-        print("🔄 Loading embedding model (one-time, ~22MB download)...")
-        # all-MiniLM-L6-v2 smol fast and fast XD
-        _model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("Model loaded!")
-    return _model
 
 def chunk_text(text: str, chunk_size: int = 600) -> list[str]:
     """Heading-aware chunking that keeps sections together"""
     chunks = []
-    lines = text.split('\n')
-    
+    lines = text.split("\n")
+
     current_chunk = ""
     current_heading = ""
-    
+
     for line in lines:
-        # find md head ##
-        if line.startswith('##'):
-            # save previous chunk if exists
+        if line.startswith("##"):
             if current_chunk.strip():
                 chunks.append(current_chunk.strip())
-            
-            # start new chunk with heading
+
             current_heading = line + "\n"
             current_chunk = current_heading
         else:
-            # add line to current chunk
-            if line.strip():  # skip empty lines within sections
+            if line.strip():
                 current_chunk += line + "\n"
-            
-            # if chunk too big spilt but save heading context
+
             if len(current_chunk) > chunk_size and current_chunk != current_heading:
                 chunks.append(current_chunk.strip())
-                # Start new chunk with same heading for continuity
                 current_chunk = current_heading
-    
-    # Add final chunk
+
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
-    
+
     return chunks
 
-def get_embedding(text: str, model: SentenceTransformer) -> list[float]:
-    """Get embedding from local model (runs on CPU, fast)"""
-    embedding = model.encode(text, convert_to_numpy=True)
-    return embedding.tolist()
 
 def load_kb_documents():
-    """Load KB documents with chunking & local embeddings"""
+    """Load KB documents with chunking and Jina embeddings (retrieval.passage)."""
     from app.config import settings
-    
-    # Load local embedding model
-    model = get_embedding_model()
-    engine = create_engine(settings.DATABASE_URL)
-    
+
     with engine.begin() as conn:
-        # schema use 384 dim size of the model max size
-        
-        # clear existing kb entries
         conn.execute(text("DELETE FROM kb_embeddings"))
-        
-        print(f"Loading & embedding KB documents from {KB_DIR}...")
-        
-        total_chunks = 0
+
+        print(f"Loading & embedding KB documents from {KB_DIR} (Jina API, model={settings.JINA_EMBEDDINGS_MODEL})...")
+
+        rows: list[tuple[str, str]] = []
         for file in os.listdir(KB_DIR):
             if not file.endswith(".md"):
                 continue
-                
+
             path = os.path.join(KB_DIR, file)
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            
-            # chunk the doc
+
             chunks = chunk_text(content)
             print(f"  📄 {file}: {len(chunks)} chunks")
-            
-            # embed and store each chunk
             for i, chunk in enumerate(chunks):
+                rows.append((f"{file}_chunk{i+1}", chunk))
+
+        total_chunks = 0
+        for start in range(0, len(rows), _EMBED_BATCH_SIZE):
+            batch = rows[start : start + _EMBED_BATCH_SIZE]
+            doc_names = [r[0] for r in batch]
+            texts = [r[1] for r in batch]
+            embeddings = embed_texts_sync(texts, task="retrieval.passage")
+            for doc_name, chunk, emb in zip(doc_names, texts, embeddings):
                 try:
-                    embedding = get_embedding(chunk, model)
-                    
                     conn.execute(
-                        text("INSERT INTO kb_embeddings (doc_name, content, embedding) VALUES (:doc, :content, :emb)"),
-                        {"doc": f"{file}_chunk{i+1}", "content": chunk, "emb": embedding}
+                        text(
+                            "INSERT INTO kb_embeddings (doc_name, content, embedding) VALUES (:doc, :content, :emb)"
+                        ),
+                        {"doc": doc_name, "content": chunk, "emb": emb},
                     )
                     total_chunks += 1
                 except Exception as e:
-                    print(f"Error embedding chunk {i+1}: {e}")
-        
-        print(f"\nSuccessfully loaded {total_chunks} chunks with LOCAL embeddings!")
-        print("   (No API calls, runs on CPU, completely free!)")
+                    print(f"Error storing chunk {doc_name}: {e}")
+
+        print(f"\nSuccessfully loaded {total_chunks} chunks via Jina Embeddings API.")
         return total_chunks
+
 
 if __name__ == "__main__":
     load_kb_documents()

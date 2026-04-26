@@ -1,8 +1,13 @@
-from fastapi import APIRouter
+from collections import defaultdict, deque
+import time
+
+from fastapi import APIRouter, Request
 from groq import Groq
 from app.mcp_tools import sql_query, kb_search, kpi_top_root_causes
 from app.config import settings
 from pydantic import BaseModel
+import asyncio
+import re
 
 router = APIRouter()
 client = Groq(api_key=settings.GROQ_API_KEY)
@@ -13,8 +18,99 @@ TOOLS = {
     "kpi.top_root_causes": kpi_top_root_causes
 }
 
+_RATE_LIMIT_WINDOW_SECONDS = 60
+_RATE_LIMIT_MAX_REQUESTS = 10
+_request_log: dict[str, deque[float]] = defaultdict(deque)
+
 class AskPayload(BaseModel):
     question: str
+
+async def _groq_chat_create_with_backoff(**kwargs):
+    """
+    Groq can rate-limit on TPM. This retries a few times on 429 with short backoff.
+    """
+    last_err: Exception | None = None
+    for attempt in range(4):
+        try:
+            return await asyncio.to_thread(client.chat.completions.create, **kwargs)
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            if "Error code: 429" in msg or "rate_limit" in msg.lower():
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            raise
+    raise last_err or RuntimeError("Groq request failed after retries")
+
+def _sanitize_generated_sql(sql: str) -> str:
+    """
+    Patch common LLM SQL mistakes for this repo's schema without changing intent.
+    Keep this conservative: only fix known, safe patterns.
+    """
+    import re
+    
+    fixed = sql
+
+    # GROUP BY cannot contain "AS alias"
+    fixed = re.sub(r"(\bGROUP\s+BY\b[^;]*?)\bAS\s+\w+", r"\1", fixed, flags=re.IGNORECASE)
+
+    # Fix alias typos by explicit scan
+    result = []
+    i = 0
+    while i < len(fixed):
+        if fixed[i:i+4] == "clp.":
+            result.append("cp.")
+            i += 4
+        elif fixed[i:i+4] == "llp.":
+            result.append("lp.")
+            i += 4
+        else:
+            result.append(fixed[i])
+            i += 1
+    fixed = ''.join(result)
+
+    # Alias mismatch: query often selects "p.*" but joins "products lp"
+    has_p_alias = bool(re.search(r"\b(?:FROM|JOIN)\s+\w+\s+p\b", fixed, flags=re.IGNORECASE))
+    m = re.search(r"\bJOIN\s+products\s+(\w+)\b", fixed, flags=re.IGNORECASE)
+    if m and not has_p_alias and "p." in fixed:
+        prod_alias = m.group(1)
+        fixed = fixed.replace("p.", f"{prod_alias}.")
+
+    # Another common mistake: product NAMES are placed into category filters.
+    # In our mock data, products.category is "Finance" while names are like "Digital Saving".
+    fixed = re.sub(
+        r"\b(\w+)\.category\s+IN\s*\(\s*'Digital Saving'\s*,\s*'Digital Lending'\s*,\s*'Investment'\s*,\s*'Insurance'\s*\)",
+        r"\1.name IN ('Digital Saving', 'Digital Lending', 'Investment', 'Insurance')",
+        fixed,
+        flags=re.IGNORECASE,
+    )
+
+    return fixed
+
+def _extract_sql_from_llm_output(sql_response: str) -> str:
+    """Extract plain SQL from model output, removing markdown wrappers."""
+    sql_match = re.search(r"```sql\s*(.+?)\s*```", sql_response, re.DOTALL | re.IGNORECASE)
+    if sql_match:
+        candidate = sql_match.group(1).strip()
+    else:
+        candidate = re.sub(r"```.*?\n", "", sql_response)
+        candidate = re.sub(r"```", "", candidate).strip()
+    return candidate
+
+def _is_read_query(sql: str) -> bool:
+    """Allow only SELECT/WITH statements (matches sql_query guardrail)."""
+    upper = sql.strip().upper()
+    first = upper.split("--")[0].strip()
+    return first.startswith("SELECT") or first.startswith("WITH")
+
+def _friendly_sql_error(raw: str) -> str:
+    """Return clearer message for common SQL generation failures."""
+    lower = raw.lower()
+    if "syntax error" in lower:
+        return "Generated SQL had invalid syntax. Please rephrase your question with simpler wording."
+    if "does not exist" in lower or "missing from-clause entry" in lower:
+        return "Generated SQL referenced invalid table/column names. Please try your question again."
+    return "Failed to run generated SQL safely. Please try a more specific query."
 
 def is_greeting_or_chat(question: str):
     """Simple fallback check if LLM decision fails"""
@@ -160,13 +256,13 @@ RULES:
 - Sound like a helpful colleague"""
         
         response = client.chat.completions.create(
-            model="groq/compound",
+            model=settings.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"{context}\n\nProvide a natural, helpful answer (2-3 sentences):"}
             ],
             temperature=0.3,  # low tem for reduceing hallu 
-            max_tokens=200
+            max_tokens=min(settings.GROQ_MAX_TOKENS, 256)
         ).choices[0].message.content
         
         return response
@@ -204,7 +300,22 @@ def select_tool_by_keywords(question: str):
     return "sql.query", "Question asks about data (count, list, show, etc.)"
 
 @router.post("/ask")
-async def ask_question(payload: AskPayload):
+async def ask_question(payload: AskPayload, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    window = _request_log[client_ip]
+    while window and now - window[0] > _RATE_LIMIT_WINDOW_SECONDS:
+        window.popleft()
+    if len(window) >= _RATE_LIMIT_MAX_REQUESTS:
+        return {
+            "error": "rate_limit_exceeded",
+            "tool_used": "rate_limiter",
+            "data": [],
+            "answer": "Too many requests. Please wait a minute before trying again.",
+            "message": "Rate limit exceeded (10 requests per minute).",
+        }
+    window.append(now)
+
     question = payload.question
     tool_list = ", ".join(TOOLS.keys())
 
@@ -251,14 +362,14 @@ CRITICAL RULES:
 - If question needs data/numbers, use "sql.query" or "kpi.top_root_causes"
 - Be intelligent - understand the INTENT, not just keywords!"""
 
-        llm_decision = client.chat.completions.create(
-            model="groq/compound",
+        llm_decision = (await _groq_chat_create_with_backoff(
+            model=settings.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": "You are a decision-making assistant. Always respond with valid JSON."},
                 {"role": "user", "content": decision_prompt}
             ],
             temperature=0.3
-        ).choices[0].message.content
+        )).choices[0].message.content
 
         import json
         import re
@@ -326,33 +437,60 @@ Available tables and schema:
    - Products: Digital Saving, Digital Lending, Investment, Insurance
 
 5. customer_products (id, customer_id, product_id, enrolled_date, status)
+   - IMPORTANT: customer_products does NOT have product_name/category; join products via customer_products.product_id = products.id
 
 Important context:
 - Virtual Bank App v1.2 was released on January 15, 2025
 - To analyze spike, compare ticket volumes before/after Jan 15
 - Use DATE() to group by day, app_version to filter by version
 - Join with products table to show product names
+- IMPORTANT joins:
+  - customers.id joins to tickets.customer_id (NOT tickets.customer)
+  - customers.id joins to logins.customer_id
 
-Return ONLY the SQL SELECT query, nothing else. Use proper JOINs when needed."""
+SQL OUTPUT RULES:
+- Return ONLY one PostgreSQL query, no markdown, no explanation
+- Query MUST start with SELECT or WITH
+- Use ONLY columns listed above
+- Never use "AS alias" inside GROUP BY
+- Use tickets.customer_id and logins.customer_id for customer joins
 
-            sql_response = client.chat.completions.create(
-                model="groq/compound",
+Return ONLY the SQL query."""
+
+            sql_response = (await _groq_chat_create_with_backoff(
+                model=settings.GROQ_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a SQL expert. Generate clean PostgreSQL queries."},
                     {"role": "user", "content": sql_prompt}
                 ],
-                temperature=0
-            ).choices[0].message.content.strip()
+                temperature=0,
+                max_tokens=min(settings.GROQ_MAX_TOKENS, 256),
+            )).choices[0].message.content.strip()
             
-            # sql remove markdown if present
-            import re
-            sql_match = re.search(r'```sql\n(.+?)\n```', sql_response, re.DOTALL)
-            if sql_match:
-                generated_sql = sql_match.group(1).strip()
-            else:
-                # remove any md code blocks
-                generated_sql = re.sub(r'```.*?\n', '', sql_response)
-                generated_sql = re.sub(r'```', '', generated_sql).strip()
+            generated_sql = _extract_sql_from_llm_output(sql_response)
+
+            # Quick guardrail: common hallucinated columns for this schema
+            # If the LLM tries to select customer_products.product_name/category, rewrite to products.name/category
+            # and ensure products is joined.
+            if "customer_products" in generated_sql and ("product_name" in generated_sql or "lp.product_name" in generated_sql):
+                generated_sql = generated_sql.replace("lp.product_name", "p.name AS product_name")
+                generated_sql = generated_sql.replace("lp.category", "p.category")
+                if " join products " not in generated_sql.lower() and " join products\n" not in generated_sql.lower():
+                    generated_sql = generated_sql.replace(
+                        "LEFT JOIN customer_products lp ON c.id = lp.customer_id",
+                        "LEFT JOIN customer_products lp ON c.id = lp.customer_id\n  LEFT JOIN products p ON lp.product_id = p.id",
+                    )
+
+            # Another common hallucination: tickets.customer instead of tickets.customer_id
+            # Fix only the alias form to avoid unintended replacements.
+            generated_sql = generated_sql.replace("t.customer ", "t.customer_id ")
+            generated_sql = generated_sql.replace("t.customer\n", "t.customer_id\n")
+            generated_sql = generated_sql.replace("t.customer)", "t.customer_id)")
+            generated_sql = generated_sql.replace("t.customer,", "t.customer_id,")
+
+            generated_sql = _sanitize_generated_sql(generated_sql)
+            if not _is_read_query(generated_sql):
+                raise ValueError("Generated query is not read-only (SELECT/WITH only).")
             
             result = await sql_query(generated_sql)
             
@@ -401,12 +539,16 @@ Return ONLY the SQL SELECT query, nothing else. Use proper JOINs when needed."""
         logger = logging.getLogger(__name__)
         logger.error(f"Error executing tool {tool_name}: {str(e)}")
         
+        answer_msg = f"Error: {str(e)}"
+        if tool_name == "sql.query":
+            answer_msg = _friendly_sql_error(str(e))
+
         error_response = {
             "error": str(e),
             "error_type": type(e).__name__,
             "tool_used": tool_name,
             "data": [],
-            "answer": f"Error: {str(e)}",
+            "answer": answer_msg,
             "message": "An error occurred while processing your question."
         }
         

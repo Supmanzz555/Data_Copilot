@@ -1,16 +1,63 @@
 # Environment
 .env
+.env.local
+.env.*.local
 .env.bak
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+tarballs/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
 venv/
 .venv/
+env/
+.env/
+bank/
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
 
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db

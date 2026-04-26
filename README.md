@@ -1,212 +1,211 @@
-# 🏦 Deep Insights Copilot - dBank
+# Deep Insights Copilot (dBank_Copilot)
 
-> AI-powered support system for dBank's Operation team 
+> AI-powered support system for dBank's Operations team that answers natural-language questions grounded in company data.
 
-## Note
-all of the data showing in this project is mocking up there is no REAL dBank app (even real bank name) or real customer database in this XD
+## Overview
 
-## 📋 Overview
+Deep Insights Copilot is an intelligent system that allows business users to query database and documentation using natural language, without writing SQL. It leverages LLM (Groq) for natural language understanding and PostgreSQL + pgvector for data storage and semantic search.
 
-The Deep Insights Copilot is an intelligent system designed to:
-- Answer natural-language questions grounded in company data
-- Execute safe, parameterized SQL queries via MCP tools
+**Note**: This project uses mock data for demonstration purposes.
 
-##  Features
+---
 
-### 1. **Data Layer**
--  4 data sources modeled in PostgreSQL (star schema)
-  - Customers
-  - Tickets
-  - Login access
-  - Products
-- dbt transformations
-- Data quality tests
+## Features
 
-### 2. **Retrieval Layer**
-- Vector store using [pgvector](https://github.com/pgvector/pgvector?tab=readme-ov-file#docker) (which is best if you use docker image version)
+### Core Features
+- **Natural Language to SQL** - Convert plain English questions into executable SQL queries
+- **Knowledge Base Search** - Semantic search over documentation using embeddings
+- **KPI Analytics** - Pre-built queries for common metrics (top root causes, etc.)
+- **Rate Limiting** - 10 requests per minute to prevent abuse
 
-- Knowledge base with 9 markdown documents
-- Semantic search capabilities
+### Security Features
+- **Read-only Database** - Only SELECT/WITH queries allowed
+- **PII Masking** - Automatically masks emails and customer names
+- **SQL Sanitization** - Fixes common LLM-generated SQL mistakes
+- **Request Validation** - Config validation at startup
 
-### 3. **LLM Layer (RAG)**
-- FastAPI backend with Groq LLM integration
-- Context-aware question answering
-- Automatic tool selection
+### UI Features
+- **Modern Vue 3 Interface** - Clean, responsive chat UI
+- **Dark Mode** - Toggle between light and dark themes
+- **Data Visualization** - Results displayed in formatted tables
+- **SQL Preview** - Shows generated SQL before execution
+- **Animations** - Smooth message animations and loading states
 
-### 4. **MCP Server**
-Three discoverable tools:
-- `sql.query` - Read-only parameterized SQL queries
-- `kb.search` - Semantic search over documentation
-- `kpi.top_root_causes` - Aggregation for top issues
+---
 
-### 5. **UI**
-- Simple chat box for testing bot capability
+## Tech Stack
 
-### 6. **AI Guardrails** 
-- **Read-only database access**
-- **PII masking** (emails & names automatically masked)
-- **Parameterized queries** (SQL injection protection)
-- **Tool call logging** (all actions tracked)
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Backend** | FastAPI + Python | REST API server |
+| **Database** | PostgreSQL 18 + pgvector | Relational DB + vector store |
+| **LLM** | Groq (llama-3.1-8b-instant) | Natural language understanding |
+| **Embeddings** | Jina AI (jina-embeddings-v3) | Document vectorization |
+| **Frontend** | Vue 3 + Tailwind CSS | Responsive chat interface |
+| **Container** | Docker + Docker Compose | Deployment |
 
-## How to test it
+---
+
+## Project Structure
+
+```
+dBank_Copilot/
+├── app/
+│   ├── main.py              # FastAPI application entry point
+│   ├── config.py           # Pydantic settings (API keys, config)
+│   ├── database.py         # SQLAlchemy engines with connection pooling
+│   ├── db.py               # Legacy DB module (imports from database.py)
+│   ├── embeddings.py       # Knowledge base chunking & loading
+│   ├── jina_client.py      # Jina Embeddings API client
+│   ├── mcp_tools.py        # Database query tools (sql_query, kb_search, etc.)
+│   ├── mock_data.py        # Mock data generation
+│   ├── pii_masking.py      # PII protection functions
+│   ├── schema.sql         # Database schema + indexes + FK
+│   ├── routes/
+│   │   ├── ask.py         # POST /ask endpoint
+│   │   └── tools.py       # Tool listing endpoints
+│   ├── static/
+│   │   └── index.html     # Vue 3 frontend (responsive)
+│   └── kb_docs/           # Knowledge base markdown files
+├── dbt/
+│   ├── models/            # dbt transformation models
+│   └── tests/             # dbt tests
+├── docker-compose.yml    # Container orchestration
+├── Dockerfile            # App container image
+├── requirements.txt       # Python dependencies
+└── bank/                 # Virtual environment (uv)
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web UI |
+| `/ask` | POST | Ask a question in natural language |
+| `/tools/list` | GET | List available MCP tools |
+| `/tools/call` | POST | Call a specific tool |
+
+### Example: Ask a Question
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Top 5 root causes of issues"}'
+```
+
+```json
+{
+  "tool_used": "kpi.top_root_causes",
+  "answer": "The top 5 root causes are...",
+  "data": [
+    {"category": "App Crash", "count": 45, "percentage": 32.14}
+  ]
+}
+```
+
+---
+
+## MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `sql.query` | Execute read-only SQL queries |
+| `kb.search` | Semantic search over knowledge base |
+| `kpi.top_root_causes` | Top 5 issue categories with percentages |
+
+---
+
+## Getting Started
 
 ### Prerequisites
 - Docker & Docker Compose
-- **Groq API key** ([Get one here](https://console.groq.com)) - Required
+- Groq API key (https://console.groq.com)
+- Jina API key (https://jina.ai/embeddings)
 
-### Setup
+### Quick Start
 
-1. **Clone the repository**
 ```bash
-cd dBank
-```
+# Clone and configure
+cd dBank_Copilot
+cp .env.example .env
+# Edit .env with your API keys
 
-2. **Configure environment variables**
-```bash
-# Edit .env and add your Groq API key:
-DATABASE_URL=postgresql://admin:admin@db:5432/deep_insights
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-> **Note**: Embeddings run locally it Uses `sentence-transformers` on CPU
-
-3. **Start the application** 
-```bash
+# Start
 docker-compose up --build
+
+# Access
+open http://localhost:8000
 ```
 
-The system will automatically:
-- Wait for the database to be ready
-- Create tables and load mock data (if needed)
-- Start the FastAPI server
+### Example Questions to Try
+- "How many customers do we have?"
+- "Top 5 root causes of issues"
+- "Show me all products"
+- "What is Digital Lending?"
+- "Tickets after v1.2 release"
 
-4. **Access the UI**
-Open your browser to: **http://localhost:8000**
+---
 
-## 🎯 Example Questions
+## Configuration
 
-Try asking the copilot:
+### Environment Variables
 
-1. **"Top 5 root causes of product issues in the previous month by category with % open ticket"**
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | - | PostgreSQL connection string |
+| `GROQ_API_KEY` | Yes | - | Groq API key for LLM |
+| `JINA_API_KEY` | Yes | - | Jina API key for embeddings |
+| `DEBUG` | No | `false` | Enable SQL debug logging |
 
-2. **"Did ticket volume spike after Virtual Bank App v1.2 release?"**
+---
 
-3. **"Write the SQL for churned customers in the last 30, 90 days (not logged in)"**
+## Database Schema
 
-## 📊 API Endpoints
+### Tables
+- `customers` - Customer data
+- `products` - Product catalog
+- `customer_products` - Customer-product relationships
+- `tickets` - Support tickets
+- `kb_embeddings` - Vector store for knowledge base
 
-### Ask a Question
-```bash
-POST /ask
-{
-  "question": "What are the top root causes?"
-}
-```
+### Performance Indexes
+- `idx_tickets_customer_id`, `idx_tickets_product_id`
+- `idx_logins_customer_id`
+- `idx_customer_products_*`
+- `idx_kb_embeddings_embedding` (pgvector)
 
-### List Available Tools
-```bash
-GET /tools/list
-```
+---
 
-### Call a Tool Directly
-```bash
-POST /tools/call
-{
-  "name": "kpi.top_root_causes",
-  "params": {}
-}
-```
-
-## 🗂️ Project Structure
-
-```
-dBank/
-├── app/
-│   ├── config.py          # Configuration settings
-│   ├── db.py             # Database connection
-│   ├── embeddings.py     # KB embedding logic
-│   ├── main.py           # FastAPI app entry
-│   ├── mcp_tools.py      # MCP tool implementations
-│   ├── mock_data.py      # Data generation
-│   ├── pii_masking.py    # PII protection
-│   ├── schema.sql        # Database schema
-│   ├── kb_docs/          # Knowledge base markdown files
-│   ├── routes/
-│   │   ├── ask.py        # Question answering endpoint
-│   │   └── tools.py      # MCP tool endpoints
-│   └── static/
-│       └── index.html    # Web UI
-├── dbt/
-│   ├── models/           # dbt transformations
-│   └── tests/            # Data quality tests
-├── docker-compose.yml
-├── Dockerfile
-└── requirements.txt
-```
-
-## Running dbt Transformations
+## Running Tests
 
 ```bash
-# Access the app container
-docker-compose exec app bash
-
-# Run dbt models
-cd dbt
-dbt run
+# Activate virtual environment
+source bank/bin/activate
 
 # Run tests
-dbt test
+pytest test_plan_updates_unit.py -v
 ```
 
-## Stack used
+---
 
-- **Backend**: FastAPI, Python 
-- **Database**: PostgreSQL 18 with pgvector extension
-- **LLM**: Groq (Compound model)
-- **Data Transformation**: dbt
-- **Containerization**: Docker & Docker Compose
-- **ORM**: SQLAlchemy 
+## Documentation Files
 
+| File | Description |
+|------|-------------|
+| `README.md` | This overview |
+| `DEVELOPMENT.md` | Development guide and maintenance |
+| `PLAN.md` | Implementation plan |
+| `TODO.md` | Completed tasks |
+| `note.md` | Quick project summary |
 
-## Doc (KB base topics) (mocking up information for the bots)
+---
 
-- App Release v1.2
-- Digital Lending
-- Digital Saving
-- Known Issues
-- Performance Metrics
-- Product Policies
-- Root Cause Analysis
-- Ticket Guidelines
-- Troubleshooting
+## Future Improvements
 
-##  Troubleshooting
+See [TODO.md](./TODO.md) for planned enhancements.
 
-### Database connection issues
-```bash
-# Check if DB is running
-docker-compose ps
+---
 
-# Restart services
-docker-compose restart
-```
-
-### Missing Groq API key
-Edit `.env` file and add your API key, then restart:
-```bash
-docker-compose down
-docker-compose up
-```
-
-
-**Note**: Replace `your_groq_api_key_here` in `.env` with your actual Groq API key before starting the application.
-
-## Things that should be added in the future
--  Proper CI/CD pipeline
--  Observability
--  rate limits, circuit breakers etc
--  **basically the good structure of MLops system**
-
-## Contribute
-Yes! and feels free to do so!
-
+*Last updated: April 2026*
