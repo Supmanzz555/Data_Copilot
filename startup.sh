@@ -21,10 +21,16 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# check groq api key
-if grep -q "your_groq_api_key_here" .env; then
-    echo "Please edit .env and add your actual Groq API key!"
-    echo "   Get one at: https://console.groq.com"
+# check required keys
+if grep -qi "your_groq_api_key_here" .env || ! grep -q "GROQ_API_KEY=" .env; then
+    echo "Please edit .env and add your actual Groq API key."
+    echo "Get one at: https://console.groq.com"
+    exit 1
+fi
+
+if ! grep -q "JINA_API_KEY=" .env; then
+    echo "Please add JINA_API_KEY to .env."
+    echo "Get one at: https://jina.ai/embeddings"
     exit 1
 fi
 
@@ -46,6 +52,7 @@ echo ""
 echo "Useful commands:"
 echo "   View logs:        docker-compose logs -f app"
 echo "   Run tests:        docker-compose exec app python test_system.py"
+echo "   Run dbt manually: docker-compose exec app bash -lc 'cd dbt && dbt run && dbt test'"
 echo "   Stop services:    docker-compose down"
 echo ""
 
