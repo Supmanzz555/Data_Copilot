@@ -1,6 +1,6 @@
-# Deep Insights Copilot (dBank_Copilot)
+# Deep Insights Copilot (Data_Copilot)
 
-> AI-powered support system for dBank's Operations team that answers natural-language questions grounded in company data.
+> AI-powered support system for Operations team that answers natural-language questions grounded in company data.
 
 ## Overview
 
