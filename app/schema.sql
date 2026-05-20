@@ -5,7 +5,11 @@ CREATE TABLE customers (
   name TEXT,
   email TEXT,
   region TEXT,
-  joined_date DATE
+  joined_date DATE,
+  age INT,
+  income DECIMAL(10,2),
+  occupation TEXT,
+  phone TEXT
 );
 
 CREATE TABLE logins (
@@ -29,6 +33,18 @@ CREATE TABLE customer_products (
   status TEXT DEFAULT 'active'
 );
 
+CREATE TABLE transactions (
+  id SERIAL PRIMARY KEY,
+  customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
+  product_id INT REFERENCES products(id) ON DELETE CASCADE,
+  amount DECIMAL(12,2),
+  type TEXT,
+  method TEXT,
+  description TEXT,
+  created_at TIMESTAMP,
+  status TEXT DEFAULT 'completed'
+);
+
 CREATE TABLE tickets (
   id SERIAL PRIMARY KEY,
   customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
@@ -41,6 +57,15 @@ CREATE TABLE tickets (
   resolved_at TIMESTAMP,
   assigned_to TEXT,
   app_version TEXT  -- Track which app version when ticket was created
+);
+
+CREATE TABLE escalations (
+  id SERIAL PRIMARY KEY,
+  ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+  escalated_to TEXT,
+  reason TEXT,
+  escalated_at TIMESTAMP,
+  resolved_at TIMESTAMP
 );
 
 CREATE TABLE kb_embeddings (
@@ -62,6 +87,13 @@ CREATE INDEX IF NOT EXISTS idx_logins_customer_id ON logins(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customer_products_customer_id ON customer_products(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customer_products_product_id ON customer_products(product_id);
 CREATE INDEX IF NOT EXISTS idx_customer_products_status ON customer_products(status);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_customer_id ON transactions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+
+CREATE INDEX IF NOT EXISTS idx_escalations_ticket_id ON escalations(ticket_id);
 
 -- pgvector index for cosine similarity search
 CREATE INDEX IF NOT EXISTS idx_kb_embeddings_embedding

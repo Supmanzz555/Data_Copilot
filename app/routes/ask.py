@@ -24,6 +24,7 @@ _request_log: dict[str, deque[float]] = defaultdict(deque)
 
 class AskPayload(BaseModel):
     question: str
+    history: list[dict] = []
 
 async def _groq_chat_create_with_backoff(**kwargs):
     """
@@ -53,6 +54,8 @@ def _sanitize_generated_sql(sql: str) -> str:
 
     # GROUP BY cannot contain "AS alias"
     fixed = re.sub(r"(\bGROUP\s+BY\b[^;]*?)\bAS\s+\w+", r"\1", fixed, flags=re.IGNORECASE)
+    # After stripping AS alias, clean up trailing comma before FROM/ORDER/LIMIT
+    fixed = re.sub(r",\s+(\n?\s*(?:FROM|ORDER\s+BY|LIMIT|HAVING))", r"\1", fixed, flags=re.IGNORECASE)
 
     # Fix alias typos by explicit scan
     result = []
@@ -70,11 +73,12 @@ def _sanitize_generated_sql(sql: str) -> str:
     fixed = ''.join(result)
 
     # Alias mismatch: query often selects "p.*" but joins "products lp"
+    # Use word boundary to avoid clobbering cp. or lp. into clp. / llp.
     has_p_alias = bool(re.search(r"\b(?:FROM|JOIN)\s+\w+\s+p\b", fixed, flags=re.IGNORECASE))
     m = re.search(r"\bJOIN\s+products\s+(\w+)\b", fixed, flags=re.IGNORECASE)
-    if m and not has_p_alias and "p." in fixed:
+    if m and not has_p_alias and re.search(r"\bp\.", fixed):
         prod_alias = m.group(1)
-        fixed = fixed.replace("p.", f"{prod_alias}.")
+        fixed = re.sub(r"\bp\.", f"{prod_alias}.", fixed)
 
     # Another common mistake: product NAMES are placed into category filters.
     # In our mock data, products.category is "Finance" while names are like "Digital Saving".
@@ -84,6 +88,28 @@ def _sanitize_generated_sql(sql: str) -> str:
         fixed,
         flags=re.IGNORECASE,
     )
+
+    # General alias consistency: ensure column prefixes reference a real alias
+    alias_map = {}
+    for m in re.finditer(r"\b(?:FROM|JOIN)\s+(\w+)\s+(\w+)\b", fixed, re.IGNORECASE):
+        alias_map[m.group(2)] = m.group(1)
+    prefixes = set(re.findall(r"(?<=\s)(\w+)\.(?=\w)", fixed))
+    for prefix in sorted(prefixes, key=len, reverse=True):
+        if prefix not in alias_map:
+            candidates = [a for a in alias_map if prefix in a]
+            if len(candidates) == 1:
+                fixed = re.sub(r"\b" + re.escape(prefix) + r"\.", candidates[0] + ".", fixed)
+
+    # In GROUP BY, qualify bare columns that appear qualified in SELECT
+    # Use (?<![.\w]) to avoid double-qualifying already-prefixed columns like p.name
+    select_m = re.search(r"SELECT\s+(.+?)\s+FROM", fixed, re.IGNORECASE | re.DOTALL)
+    group_m = re.search(r"(GROUP\s+BY\s+)(.+?)(?:\s+(?:ORDER|LIMIT|HAVING|;|$))", fixed, re.IGNORECASE | re.DOTALL)
+    if select_m and group_m:
+        qualified = re.findall(r"(\w+)\.(\w+)", select_m.group(1))
+        group_body = group_m.group(2)
+        for prefix, col in qualified:
+            group_body = re.sub(r"(?<![.\w])" + re.escape(col) + r"(?!\w)", prefix + "." + col, group_body)
+        fixed = fixed[:group_m.start(2)] + group_body + fixed[group_m.end(2):]
 
     return fixed
 
@@ -317,13 +343,29 @@ async def ask_question(payload: AskPayload, request: Request):
     window.append(now)
 
     question = payload.question
+    history = payload.history
+
+    # Format conversation history for context
+    history_lines = []
+    if history:
+        for msg in history[-6:]:  # last 6 turns to avoid token overflow
+            role = msg.get("role", "")
+            content = (msg.get("content") or msg.get("answer") or "").strip()
+            if content:
+                history_lines.append(f"{role.capitalize()}: \"{content[:200]}\"")
+    if history_lines:
+        history_context = "\n".join(history_lines) + "\n"
+    else:
+        history_context = ""
+
     tool_list = ", ".join(TOOLS.keys())
 
     # llm will choose the tool
     try:
         decision_prompt = f"""You are a dBank support agent AI. Decide how to handle this question intelligently.
 
-User asked: "{question}"
+Previous conversation:
+{history_context}User asked: "{question}"
 
 Available tools:
 - sql.query: Query customer/ticket/product/login data from database
@@ -420,9 +462,13 @@ CRITICAL RULES:
             # Use LLM to generate SQL from natural language
             sql_prompt = f"""Generate a PostgreSQL SELECT query for this question: "{question}"
 
-Available tables and schema:
+Previous conversation:
+{history_context}Available tables and schema:
 
-1. customers (id, name, email, region, joined_date)
+1. customers (id, name, email, region, joined_date, age, income, occupation, phone)
+   - age: customer age in years (integer)
+   - income: monthly income in THB
+   - occupation: job title
 
 2. tickets (id, customer_id, product_id, category, issue, status, priority, 
             created_at, resolved_at, assigned_to, app_version)
@@ -439,6 +485,17 @@ Available tables and schema:
 5. customer_products (id, customer_id, product_id, enrolled_date, status)
    - IMPORTANT: customer_products does NOT have product_name/category; join products via customer_products.product_id = products.id
 
+6. transactions (id, customer_id, product_id, amount, type, method, description, created_at, status)
+   - amount: transaction value in THB (DECIMAL) -- use t.amount, NOT t.transaction_value
+   - type: 'deposit', 'withdrawal', 'transfer', 'payment'
+   - method: 'PromptPay', 'app_transfer', 'ATM', 'counter', 'auto_debit'
+   - created_at: timestamp when transaction occurred -- use t.created_at, NOT t.transaction_date
+   - status: 'completed', 'pending', 'failed'
+
+7. escalations (id, ticket_id, escalated_to, reason, escalated_at, resolved_at)
+   - escalated_to: 'L2_Support', 'Engineering', 'Compliance', 'Security'
+   - reason: escalation reason text
+
 Important context:
 - Virtual Bank App v1.2 was released on January 15, 2025
 - To analyze spike, compare ticket volumes before/after Jan 15
@@ -447,6 +504,8 @@ Important context:
 - IMPORTANT joins:
   - customers.id joins to tickets.customer_id (NOT tickets.customer)
   - customers.id joins to logins.customer_id
+  - customers.id joins to transactions.customer_id
+  - tickets.id joins to escalations.ticket_id
 
 SQL OUTPUT RULES:
 - Return ONLY one PostgreSQL query, no markdown, no explanation
@@ -454,6 +513,19 @@ SQL OUTPUT RULES:
 - Use ONLY columns listed above
 - Never use "AS alias" inside GROUP BY
 - Use tickets.customer_id and logins.customer_id for customer joins
+- KEEP IT SIMPLE: For basic counts/lists, write a single-table query.
+  Only add JOINs when the question explicitly mentions multiple entities.
+- NEVER use EXTRACT(), DATE(), or any function in GROUP BY -- causes syntax errors.
+  Always GROUP BY plain column names only (e.g. GROUP BY t.status, p.name).
+- Prefix all column references with their table alias (e.g. t.status, cp.status).
+- Use t.amount NOT t.transaction_value
+- Use t.created_at NOT t.transaction_date
+
+Always write the SIMPLEST query that answers the question. Examples:
+  "how many customers" → SELECT COUNT(*) AS total FROM customers
+  "show me products"  → SELECT * FROM products
+  "list open tickets" → SELECT * FROM tickets WHERE status = 'open'
+  "total transaction value" → SELECT SUM(amount) FROM transactions
 
 Return ONLY the SQL query."""
 

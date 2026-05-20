@@ -4,14 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Deep Insights Copilot</title>
-  
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -25,33 +27,19 @@
           keyframes: {
             slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
             typing: { '0%, 100%': { opacity: '0.3' }, '50%': { opacity: '1' } },
-          }
-        }
-      }
+          },
+        },
+      },
     }
   </script>
-  
-  <style>
-    * { scrollbar-width: thin; scrollbar-color: #c1c1c1 transparent; -webkit-tap-highlight-color: transparent; }
-    @media (max-width: 640px) { * { scrollbar-width: none; } *::-webkit-scrollbar { display: none; } }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
-    .dark ::-webkit-scrollbar-thumb { background: #3c4043; }
-    body { font-family: 'Inter', system-ui, sans-serif; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
-    .msg-enter { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-    .typing-dot { animation: typing 1.4s infinite ease-in-out; }
-    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-    @media (max-width: 640px) { .msg-bubble, .input-container, .input-container input { border-radius: 1rem !important; } }
-    @supports (padding-top: env(safe-area-inset-top)) { .safe-top { padding-top: env(safe-area-inset-top); } .safe-bottom { padding-bottom: env(safe-area-inset-bottom); } }
-  </style>
+
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="theme-transition h-screen h-screen overflow-hidden">
-  <div id="app" class="h-full flex flex-col" :class="isDark ? 'dark:bg-gray-900 text-white' : 'bg-gray-50 text-gray-800'">
-    
+<body class="h-screen overflow-hidden">
+  <div id="app" class="h-full flex flex-col" :class="isDark ? 'bg-[#0b0d14] text-white' : 'bg-[#f6f8fc] text-gray-800'">
+
     <!-- Header -->
-    <header class="flex-none border-b safe-top" :class="isDark ? 'border-gray-800 bg-gray-900/95 backdrop-blur-xl' : 'border-gray-100 bg-white/95 backdrop-blur-xl'">
+    <header class="flex-none border-b safe-top" :class="isDark ? 'border-gray-800/40 bg-[#11141e]/85 backdrop-blur-xl' : 'border-gray-200/60 bg-white/90 backdrop-blur-xl'">
       <div class="w-full px-4 py-3">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
@@ -65,8 +53,23 @@
               <p class="text-xs leading-tight" :class="isDark ? 'text-gray-500' : 'text-gray-400'">Copilot</p>
             </div>
           </div>
-          <button @click="toggleTheme" class="p-2.5 rounded-xl transition-all active:scale-95"
-            :class="isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-100'">
+          <div class="flex items-center gap-1">
+            <button v-if="messages.length > 0" @click="clearMessages" class="p-2.5 rounded-xl transition-all active:scale-95"
+              :class="isDark ? 'text-gray-500 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100'"
+              title="Clear conversation">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+            <button @click="toggleSearch" class="p-2.5 rounded-xl transition-all active:scale-95"
+              :class="isDark ? 'text-gray-500 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100'"
+              title="Search messages (Ctrl+K)">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+            </button>
+            <button @click="toggleTheme" class="p-2.5 rounded-xl transition-all active:scale-95"
+              :class="isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-100'">
             <svg v-if="isDark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707-.707M6.343 17.657l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
             </svg>
@@ -77,14 +80,25 @@
         </div>
       </div>
     </header>
-    
+
     <!-- Chat Area -->
     <main class="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
-      <div ref="messagesContainer" class="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-4" :class="isDark ? 'bg-gray-900' : 'bg-gray-50'">
-        
+      <div v-if="showSearch" class="flex-none px-3 sm:px-4 py-2 border-b"
+        :class="isDark ? 'bg-[#11141e]/50 border-gray-800/40' : 'bg-white/80 border-gray-200/60'">
+        <div class="max-w-3xl mx-auto relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" :class="isDark ? 'text-gray-500' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input v-model="searchQuery" class="search-input w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-transparent border focus:outline-none"
+            :class="isDark ? 'text-white border-gray-600 placeholder-gray-500' : 'text-gray-800 border-gray-300 placeholder-gray-400'"
+            placeholder="Search messages..." @keydown.escape="toggleSearch">
+        </div>
+      </div>
+      <div ref="messagesContainer" class="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-4" :class="isDark ? 'bg-[#0b0d14]' : 'bg-[#f6f8fc]'">
+
         <!-- Empty State -->
         <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center px-4">
-          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center mb-4 sm:mb-5 shadow-lg shadow-indigo-500/20">
+          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center mb-4 sm:mb-5 shadow-xl shadow-indigo-500/15">
             <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
             </svg>
@@ -95,27 +109,28 @@
           </p>
           <div class="grid grid-cols-2 gap-2 w-full max-w-sm">
             <button v-for="(action, i) in quickActions" :key="i" @click="askQuestion(action.prompt)"
-              class="px-3 py-2.5 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 text-left"
-              :class="isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700' : 'bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 shadow-sm'">
+              class="quick-action-btn px-3 py-2.5 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ease-out duration-200 active:scale-95 text-left"
+              :class="isDark ? 'bg-[#151821] hover:bg-[#1c1f2b] hover:-translate-y-0.5 text-gray-300 border border-gray-700/50' : 'bg-white hover:bg-gray-50 hover:-translate-y-0.5 text-gray-600 border border-gray-200/80 shadow-sm hover:shadow-md'">
               {{ action.label }}
             </button>
           </div>
         </div>
-        
+
         <!-- Messages -->
         <div v-else class="space-y-3 sm:space-y-4 max-w-3xl mx-auto">
-          <div v-for="(msg, index) in messages" :key="index" class="msg-enter">
-            <div v-if="msg.role === 'user'" class="flex justify-end">
+          <div v-for="(msg, index) in filteredMessages" :key="index" class="msg-enter">
+            <div v-if="msg.role === 'user'" @click="editMessage(index)" class="flex justify-end cursor-pointer group">
               <div class="max-w-[85%] sm:max-w-[75%]">
-                <div class="msg-bubble px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-br-md bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                <div class="msg-bubble px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-br-md bg-gradient-to-r from-indigo-600 to-purple-600 text-white transition-all duration-200 group-hover:brightness-110 shadow-lg shadow-indigo-600/15">
                   <p class="text-sm whitespace-pre-wrap">{{ msg.content }}</p>
                 </div>
+                <p class="text-[10px] mt-1 text-right" :class="isDark ? 'text-gray-600' : 'text-gray-400'">{{ formatTime(msg.timestamp) }}</p>
               </div>
             </div>
             <div v-else class="flex justify-start">
               <div class="max-w-[85%] sm:max-w-[75%] w-full">
                 <div class="flex gap-2.5 sm:gap-3">
-                  <div class="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
+                  <div class="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
                     <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
@@ -130,8 +145,8 @@
                       <p class="text-sm text-red-600 dark:text-red-400">{{ msg.error }}</p>
                     </div>
                     <div v-else>
-                      <div class="msg-bubble px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-tl-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50">
-                        <p class="text-sm whitespace-pre-wrap leading-relaxed" :class="isDark ? 'text-gray-200' : 'text-gray-700'">{{ msg.answer }}</p>
+                      <div class="msg-bubble msg-shadow px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-tl-md bg-white dark:bg-[#151821] border border-gray-100/80 dark:border-gray-700/30">
+                        <div class="text-sm leading-relaxed markdown-body" :class="isDark ? 'text-gray-200' : 'text-gray-700'" v-html="renderMarkdown(msg.answer)"></div>
                         <div v-if="msg.tool_used && msg.tool_used !== 'conversational'" class="mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-700/50">
                           <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium"
                             :class="isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'">
@@ -140,31 +155,69 @@
                           </span>
                         </div>
                         <div v-if="msg.generated_sql" class="mt-3">
-                          <div class="text-xs font-medium mb-1.5" :class="isDark ? 'text-gray-500' : 'text-gray-400'">SQL</div>
-                          <pre class="p-3 rounded-lg overflow-x-auto text-xs leading-relaxed" :class="isDark ? 'bg-gray-900 text-indigo-300' : 'bg-gray-900 text-indigo-200'"><code>{{ msg.generated_sql }}</code></pre>
+                          <div class="flex items-center justify-between mb-1.5">
+                            <div class="text-xs font-medium" :class="isDark ? 'text-gray-500' : 'text-gray-400'">SQL</div>
+                            <button @click="copyToClipboard(msg.generated_sql)" class="p-1 rounded-md transition-all active:scale-95"
+                              :class="isDark ? 'text-gray-500 hover:bg-gray-700' : 'text-gray-400 hover:bg-gray-200'"
+                              title="Copy SQL">
+                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                              </svg>
+                            </button>
+                          </div>
+                          <pre class="p-3 rounded-lg overflow-x-auto" :class="isDark ? 'bg-[#07080c]' : 'bg-[#07080c]'"><code class="language-sql">{{ msg.generated_sql }}</code></pre>
                         </div>
                         <div v-if="msg.data && msg.data.length > 0" class="mt-3">
-                          <div class="text-xs font-medium mb-2" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ msg.data.length }} result{{ msg.data.length > 1 ? 's' : '' }}</div>
+                          <div class="flex items-center justify-between mb-2">
+                            <div class="text-xs font-medium" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ msg.data.length }} result{{ msg.data.length > 1 ? 's' : '' }}</div>
+                            <button @click="downloadCSV(msg.data)" class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all active:scale-95"
+                              :class="isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-200'"
+                              title="Download CSV">
+                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                              CSV
+                            </button>
+                          </div>
                           <div class="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                            <div class="overflow-x-auto max-h-64 sm:max-h-80">
+                            <div class="overflow-x-auto max-h-80 sm:max-h-96">
                               <table class="w-full text-xs">
                                 <thead>
                                   <tr class="bg-gray-100 dark:bg-gray-800/50">
-                                    <th v-for="col in Object.keys(msg.data[0])" :key="col" class="px-2.5 py-2 text-left font-medium whitespace-nowrap" :class="isDark ? 'text-gray-400' : 'text-gray-500'">{{ col }}</th>
+                                    <th v-for="col in Object.keys(msg.data[0])" :key="col" @click="sortTable(msg, col)"
+                                      class="px-2.5 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors"
+                                      :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+                                      {{ col }}
+                                      <span v-if="msg.sortBy === col" class="ml-0.5 text-[10px]">{{ msg.sortDir === 'asc' ? '▲' : '▼' }}</span>
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  <tr v-for="(row, ri) in msg.data.slice(0, 8)" :key="ri" class="border-t dark:border-gray-700/50">
+                                  <tr v-for="(row, ri) in paginatedData(msg)" :key="ri" class="border-t dark:border-gray-700/50">
                                     <td v-for="col in Object.keys(row)" :key="col" class="px-2.5 py-2 font-mono whitespace-nowrap" :class="isDark ? 'text-gray-300' : 'text-gray-600'">{{ row[col] ?? '-' }}</td>
                                   </tr>
                                 </tbody>
                               </table>
                             </div>
-                            <div v-if="msg.data.length > 8" class="px-2.5 py-2 text-xs text-center" :class="isDark ? 'bg-gray-800/50 text-gray-500' : 'bg-gray-50 text-gray-400'">+ {{ msg.data.length - 8 }} more results</div>
+                            <div v-if="totalPages(msg) > 1" class="flex items-center justify-between px-2.5 py-2 text-xs border-t dark:border-gray-700/50"
+                              :class="isDark ? 'bg-gray-800/50 text-gray-400' : 'bg-gray-50 text-gray-500'">
+                              <select v-model="msg.pageSize" @change="setPage(msg, 0)" class="bg-transparent text-xs focus:outline-none cursor-pointer"
+                                :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+                                <option :value="10">10 / page</option>
+                                <option :value="25">25 / page</option>
+                                <option :value="50">50 / page</option>
+                              </select>
+                              <div class="flex items-center gap-3">
+                                <button @click="setPage(msg, (msg.currentPage || 0) - 1)" :disabled="!msg.currentPage"
+                                  class="hover:underline disabled:opacity-30 disabled:no-underline">‹ Prev</button>
+                                <span>{{ (msg.currentPage || 0) + 1 }} / {{ totalPages(msg) }}</span>
+                                <button @click="setPage(msg, (msg.currentPage || 0) + 1)" :disabled="(msg.currentPage || 0) + 1 >= totalPages(msg)"
+                                  class="hover:underline disabled:opacity-30 disabled:no-underline">Next ›</button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
+                    <p class="text-[10px] mt-1" :class="isDark ? 'text-gray-600' : 'text-gray-400'">{{ formatTime(msg.timestamp) }}</p>
                   </div>
                 </div>
               </div>
@@ -172,63 +225,27 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Input -->
-      <div class="flex-none safe-bottom px-3 sm:px-4 pb-3 sm:pb-4 pt-2" :class="isDark ? 'bg-gray-900' : 'bg-gray-50'">
+      <div class="flex-none safe-bottom px-3 sm:px-4 pb-3 sm:pb-4 pt-2" :class="isDark ? 'bg-[#0b0d14]' : 'bg-[#f6f8fc]'">
         <div class="max-w-3xl mx-auto">
-          <div class="input-container relative rounded-2xl border-2 transition-all duration-200"
-            :class="isDark ? 'bg-gray-800 border-gray-700/50 focus-within:border-indigo-500/50' : 'bg-white border-gray-200 focus-within:border-indigo-500 focus-within:shadow-lg focus-within:shadow-indigo-500/10'">
-            <input v-model="userInput" @keyup.enter="sendMessage" type="text" class="w-full px-3.5 py-3 sm:py-3.5 bg-transparent text-sm rounded-2xl focus:outline-none"
-              :class="isDark ? 'text-white placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'" placeholder="Type your message..." :disabled="isLoading">
+          <div class="input-container input-glow relative rounded-2xl border-2 transition-all duration-200"
+            :class="isDark ? 'bg-[#151821]/80 border-gray-600/30 focus-within:border-indigo-500/50' : 'bg-white border-gray-200/80 focus-within:border-indigo-500'">
+            <textarea v-model="userInput" @keydown.enter.exact.prevent="sendMessage" @input="autoResize" rows="1"
+              class="input-textarea w-full px-3.5 py-3 sm:py-3.5 bg-transparent text-sm rounded-2xl focus:outline-none resize-none overflow-y-auto"
+              :class="isDark ? 'text-white placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'" placeholder="Type your message..." :disabled="isLoading"></textarea>
             <button @click="sendMessage" :disabled="isLoading || !userInput.trim()" class="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all active:scale-95 disabled:opacity-40"
               :class="userInput.trim() && !isLoading ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : (isDark ? 'text-gray-500' : 'text-gray-400')">
               <svg v-if="isLoading" class="w-4 h-4 sm:w-5 sm:h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
               <svg v-else class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7 7 7-7 7"/></svg>
             </button>
           </div>
-          <p class="text-center text-xs mt-2 hidden sm:block" :class="isDark ? 'text-gray-600' : 'text-gray-400'">Powered by Groq · PostgreSQL + pgvector</p>
+          <p class="text-center text-[11px] mt-2 hidden sm:block" :class="isDark ? 'text-gray-600' : 'text-gray-400'">Powered by Groq · PostgreSQL + pgvector</p>
         </div>
       </div>
     </main>
   </div>
 
-  <script>
-    const { createApp, ref, nextTick, onMounted } = Vue
-    createApp({
-      setup() {
-        const isDark = ref(false), messages = ref([]), userInput = ref(''), isLoading = ref(false), messagesContainer = ref(null)
-        const quickActions = [
-          { label: 'Top causes', prompt: 'Top 5 root causes of issues' },
-          { label: 'Customers', prompt: 'How many customers?' },
-          { label: 'Products', prompt: 'Show me all products' },
-          { label: 'Docs', prompt: 'What is Digital Lending?' },
-        ]
-        onMounted(() => { const saved = localStorage.getItem('theme'); isDark.value = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches) })
-        const toggleTheme = () => { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light') }
-        const scrollToBottom = () => { nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' }) }) }
-        const sendMessage = async () => {
-          const q = userInput.value.trim()
-          if (!q || isLoading.value) return
-          messages.value.push({ role: 'user', content: q })
-          userInput.value = ''
-          scrollToBottom()
-          const loadingMsg = { role: 'ai', loading: true }
-          messages.value.push(loadingMsg)
-          isLoading.value = true
-          scrollToBottom()
-          try {
-            const res = await fetch('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) })
-            const data = await res.json()
-            const idx = messages.value.indexOf(loadingMsg)
-            messages.value[idx] = { role: 'ai', answer: data.answer || '', tool_used: data.tool_used, generated_sql: data.generated_sql, data: data.data || [], error: data.error }
-          } catch (err) { const idx = messages.value.indexOf(loadingMsg); messages.value[idx] = { role: 'ai', error: err.message } }
-          isLoading.value = false
-          scrollToBottom()
-        }
-        const askQuestion = (q) => { userInput.value = q; sendMessage() }
-        return { isDark, messages, userInput, isLoading, messagesContainer, quickActions, toggleTheme, sendMessage, askQuestion }
-      }
-    }).mount('#app')
-  </script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

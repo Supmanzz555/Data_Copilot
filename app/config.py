@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GROQ_API_KEY: str = ""  # basellm
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
-    GROQ_MAX_TOKENS: int = 256
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MAX_TOKENS: int = 1024
     DEBUG: bool = False
 
     # Jina Embeddings API — must match pgvector column size in app/schema.sql (kb_embeddings.embedding)

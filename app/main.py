@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from app.routes import ask, tools
 from app.config import settings
 import os
 
 app = FastAPI(title="Deep Insights Copilot")
 
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(ask.router)
 app.include_router(tools.router)
 

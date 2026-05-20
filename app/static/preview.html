@@ -77,11 +77,11 @@
     }
   </style>
 </head>
-<body class="theme-transition h-screen h-screen overflow-hidden">
+<body class="h-screen overflow-hidden">
   <div id="app" class="h-full flex flex-col" :class="isDark ? 'dark:bg-gray-900 text-white' : 'bg-gray-50 text-gray-800'">
     
     <!-- Header -->
-    <header class="flex-none border-b safe-top" :class="isDark ? 'border-gray-800 bg-gray-900/95 backdrop-blur-xl' : 'border-gray-100 bg-white/95 backdrop-blur-xl'">
+    <header class="flex-none border-b safe-top" :class="isDark ? 'border-gray-700/50 bg-gray-800/80 backdrop-blur-xl' : 'border-gray-100 bg-white/95 backdrop-blur-xl'">
       <div class="w-full px-4 py-3">
         <div class="flex items-center justify-between">
           <!-- Logo -->
@@ -181,8 +181,8 @@
                     
                     <!-- Content -->
                     <div v-else>
-                      <div class="msg-bubble px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-tl-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50">
-                        <p class="text-sm whitespace-pre-wrap leading-relaxed" :class="isDark ? 'text-gray-200' : 'text-gray-700'">{{ msg.answer }}</p>
+                      <div class="msg-bubble px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-tl-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-600/30">
+                        <div class="text-sm leading-relaxed markdown-body" :class="isDark ? 'text-gray-200' : 'text-gray-700'">{{ msg.answer }}</div>
                         
                         <!-- Tool Badge -->
                         <div v-if="msg.tool_used && msg.tool_used !== 'conversational'" class="mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-700/50">
@@ -238,11 +238,7 @@
       <div class="flex-none safe-bottom px-3 sm:px-4 pb-3 sm:pb-4 pt-2" :class="isDark ? 'bg-gray-900' : 'bg-gray-50'">
         <div class="max-w-3xl mx-auto">
           <div class="input-container relative rounded-2xl border-2 transition-all duration-200"
-            :class="[
-              isDark 
-                ? 'bg-gray-800 border-gray-700/50 focus-within:border-indigo-500/50' 
-                : 'bg-white border-gray-200 focus-within:border-indigo-500 focus-within:shadow-lg focus-within:shadow-indigo-500/10',
-            ]">
+            :class="isDark ? 'bg-gray-800/50 border-gray-600/30 focus-within:border-indigo-500/50' : 'bg-white border-gray-200 focus-within:border-indigo-500 focus-within:shadow-lg focus-within:shadow-indigo-500/10'">
             <input
               v-model="userInput"
               @keyup.enter="sendMessage"
@@ -293,9 +289,14 @@
         onMounted(() => {
           const saved = localStorage.getItem('theme')
           isDark.value = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', isDark.value)
         })
         
-        const toggleTheme = () => { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light') }
+        const toggleTheme = () => {
+          isDark.value = !isDark.value
+          document.documentElement.classList.toggle('dark', isDark.value)
+          localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+        }
         const scrollToBottom = () => { nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' }) }) }
         
         const sendMessage = async () => {
