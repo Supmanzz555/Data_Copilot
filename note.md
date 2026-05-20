@@ -1,7 +1,7 @@
-# dBank_Copilot - Project Summary
+# DataCopilot - Project Summary
 
 ## Overview
-AI-powered support system for dBank's Operations team - answers natural-language questions grounded in company data and executes safe SQL queries.
+AI-powered chat copilot that answers natural-language questions using SQL and knowledge base search.
 
 ## Tech Stack
 - **Backend**: FastAPI + Python

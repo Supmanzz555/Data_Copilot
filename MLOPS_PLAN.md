@@ -1,8 +1,8 @@
-# dBank_Copilot - Complete Project Plan
+# DataCopilot - Complete MLOps Plan
 
 ## Part 1: Current Project Overview
 
-An AI-powered support system for dBank's Operations team that answers natural-language questions grounded in company data, executes safe SQL queries, and provides knowledge base search.
+An AI-powered chat copilot that answers natural-language questions using SQL queries and knowledge base search.
 
 ### Tech Stack
 | Layer | Technology |
@@ -16,7 +16,7 @@ An AI-powered support system for dBank's Operations team that answers natural-la
 
 ### Project Structure
 ```
-dBank_Copilot/
+DataCopilot/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py           # Pydantic settings
@@ -47,7 +47,7 @@ dBank_Copilot/
 ### Architecture Diagram
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      dBank_Copilot Stack                             │
+│                         DataCopilot Stack                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐        │
@@ -90,10 +90,10 @@ from fastapi import APIRouter, Response
 router = APIRouter()
 
 # Metrics
-REQUEST_COUNT = Counter('dbank_requests_total', 'Total requests', ['tool'])
-REQUEST_LATENCY = Histogram('dbank_request_latency_seconds', 'Request latency', ['tool'])
-ACTIVE_REQUESTS = Gauge('dbank_active_requests', 'Active requests')
-ERROR_COUNT = Counter('dbank_errors_total', 'Total errors', ['type'])
+REQUEST_COUNT = Counter('datacopilot_requests_total', 'Total requests', ['tool'])
+REQUEST_LATENCY = Histogram('datacopilot_request_latency_seconds', 'Request latency', ['tool'])
+ACTIVE_REQUESTS = Gauge('datacopilot_active_requests', 'Active requests')
+ERROR_COUNT = Counter('datacopilot_errors_total', 'Total errors', ['type'])
 
 @router.get("/metrics")
 async def metrics():
@@ -150,7 +150,7 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'dBank_Copilot'
+  - job_name: 'DataCopilot'
     static_configs:
       - targets: ['app:8000']
     metrics_path: '/metrics'
@@ -188,10 +188,10 @@ prometheus-client>=0.17.0
 ### App Metrics (from /metrics endpoint)
 | Metric | Type | Purpose |
 |--------|------|---------|
-| `dbank_requests_total` | Counter | Total requests by tool |
-| `dbank_request_latency_seconds` | Histogram | Request latency distribution |
-| `dbank_active_requests` | Gauge | Currently active requests |
-| `dbank_errors_total` | Counter | Errors by type |
+| `datacopilot_requests_total` | Counter | Total requests by tool |
+| `datacopilot_request_latency_seconds` | Histogram | Request latency distribution |
+| `datacopilot_active_requests` | Gauge | Currently active requests |
+| `datacopilot_errors_total` | Counter | Errors by type |
 
 ### Database Metrics
 | Metric | Type | Purpose |

@@ -1,10 +1,10 @@
-# Deep Insights Copilot (dBank_Copilot)
+# DataCopilot
 
-> AI-powered support system for dBank's Operations team that answers natural-language questions grounded in company data.
+> AI-powered chat copilot that answers natural-language questions about your data using SQL and knowledge base search.
 
 ## Overview
 
-Deep Insights Copilot is an intelligent system that allows business users to query database and documentation using natural language, without writing SQL. It leverages LLM (Groq) for natural language understanding and PostgreSQL + pgvector for data storage and semantic search.
+DataCopilot is an intelligent system that allows business users to query a database and documentation using natural language, without writing SQL. It leverages LLM (Groq) for natural language understanding and PostgreSQL + pgvector for data storage and semantic search.
 
 **Note**: This project uses mock data for demonstration purposes.
 
@@ -39,7 +39,7 @@ Deep Insights Copilot is an intelligent system that allows business users to que
 |-------|------------|---------|
 | **Backend** | FastAPI + Python | REST API server |
 | **Database** | PostgreSQL 18 + pgvector | Relational DB + vector store |
-| **LLM** | Groq (llama-3.1-8b-instant) | Natural language understanding |
+| **LLM** | Groq (llama-3.3-70b-versatile) | Natural language understanding |
 | **Embeddings** | Jina AI (jina-embeddings-v3) | Document vectorization |
 | **Frontend** | Vue 3 + Tailwind CSS | Responsive chat interface |
 | **Container** | Docker + Docker Compose | Deployment |
@@ -49,7 +49,7 @@ Deep Insights Copilot is an intelligent system that allows business users to que
 ## Project Structure
 
 ```
-dBank_Copilot/
+DataCopilot/
 ├── app/
 │   ├── main.py              # FastAPI application entry point
 │   ├── config.py           # Pydantic settings (API keys, config)
@@ -128,7 +128,7 @@ curl -X POST http://localhost:8000/ask \
 
 ```bash
 # Clone and configure
-cd dBank_Copilot
+cd DataCopilot
 cp .env.example .env
 # Edit .env with your API keys
 
@@ -141,10 +141,13 @@ open http://localhost:8000
 
 ### Example Questions to Try
 - "How many customers do we have?"
+- "Total transaction value by payment method"
+- "Average customer age"
 - "Top 5 root causes of issues"
 - "Show me all products"
 - "What is Digital Lending?"
 - "Tickets after v1.2 release"
+- "Escalations sent to Engineering"
 
 ---
 
@@ -164,16 +167,21 @@ open http://localhost:8000
 ## Database Schema
 
 ### Tables
-- `customers` - Customer data
+- `customers` - Customer data (name, email, region, age, income, occupation)
 - `products` - Product catalog
 - `customer_products` - Customer-product relationships
-- `tickets` - Support tickets
+- `logins` - Customer login tracking
+- `transactions` - Financial transactions (amount, type, method, status)
+- `tickets` - Support tickets with realistic issue descriptions
+- `escalations` - Ticket escalation tracking
 - `kb_embeddings` - Vector store for knowledge base
 
 ### Performance Indexes
-- `idx_tickets_customer_id`, `idx_tickets_product_id`
+- `idx_tickets_customer_id`, `idx_tickets_product_id`, `idx_tickets_status`
 - `idx_logins_customer_id`
 - `idx_customer_products_*`
+- `idx_transactions_customer_id`, `idx_transactions_created_at`
+- `idx_escalations_ticket_id`
 - `idx_kb_embeddings_embedding` (pgvector)
 
 ---
@@ -184,8 +192,8 @@ open http://localhost:8000
 # Activate virtual environment
 source bank/bin/activate
 
-# Run tests
-pytest test_plan_updates_unit.py -v
+# Run all tests
+pytest test_frontend.py test_sql_guardrails.py test_plan_updates_unit.py -v
 ```
 
 ---
@@ -208,4 +216,4 @@ See [TODO.md](./TODO.md) for planned enhancements.
 
 ---
 
-*Last updated: April 2026*
+*Last updated: May 2026*

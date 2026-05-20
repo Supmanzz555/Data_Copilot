@@ -1,16 +1,16 @@
-# dBank_Copilot - Project Documentation
+# DataCopilot - Project Documentation
 
-> AI-powered support system for dBank's Operations team
+> AI-powered chat copilot that answers natural-language questions using SQL and knowledge base search.
 
 ## Overview
 
-Deep Insights Copilot is an intelligent system that:
+DataCopilot is an intelligent system that:
 - Answers natural-language questions grounded in company data
 - Executes safe, parameterized SQL queries via MCP tools
 - Provides semantic search over knowledge base documents
 - Delivers aggregated KPIs for business analysis
 
-**Note**: All data in this project is mock data - no real dBank app or customer database.
+**Note**: All data in this project is mock data for demonstration purposes.
 
 ---
 

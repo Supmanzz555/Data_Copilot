@@ -1,4 +1,4 @@
-# Plan: dBank_Copilot Improvements
+# Plan: DataCopilot Improvements
 
 ## Goal
 Fix the highest-impact reliability, performance, and security issues with a safe rollout order.
