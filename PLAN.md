@@ -40,7 +40,7 @@ CREATE INDEX idx_kb_embeddings_embedding ON kb_embeddings USING ivfflat (embeddi
 Add startup/config validation so app fails fast with a clear message when required keys are missing.
 
 Implementation guidance:
-- Keep current Pydantic v1 style for now.
+- Keep current Pydantic v2 style.
 - Validate both `GROQ_API_KEY` and `JINA_API_KEY`.
 - Prefer startup/runtime validation if you want clearer operational errors.
 

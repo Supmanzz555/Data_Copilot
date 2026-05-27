@@ -36,7 +36,7 @@
 ### Documentation
 - [x] README.md - Complete project overview
 - [x] DEVELOPMENT.md - Development guide
-- [x] note.md - Quick summary
+- [x] ~~note.md~~ (deleted, was redundant with README)
 - [x] MLOPS_PLAN.md - MLOps implementation plan
 
 ### Data & Mock Data Enrichment

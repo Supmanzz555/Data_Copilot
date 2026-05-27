@@ -205,8 +205,7 @@ pytest test_frontend.py test_sql_guardrails.py test_plan_updates_unit.py -v
 | `README.md` | This overview |
 | `DEVELOPMENT.md` | Development guide and maintenance |
 | `PLAN.md` | Implementation plan |
-| `TODO.md` | Completed tasks |
-| `note.md` | Quick project summary |
+| `TODO.md` | Completed tasks and planned enhancements |
 
 ---
 

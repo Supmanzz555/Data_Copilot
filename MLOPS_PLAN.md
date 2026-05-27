@@ -1,48 +1,6 @@
-# DataCopilot - Complete MLOps Plan
+# DataCopilot - MLOps Plan
 
-## Part 1: Current Project Overview
-
-An AI-powered chat copilot that answers natural-language questions using SQL queries and knowledge base search.
-
-### Tech Stack
-| Layer | Technology |
-|-------|------------|
-| Backend | FastAPI + Python |
-| Database | PostgreSQL 18 + pgvector |
-| LLM | Groq |
-| Embeddings | Jina AI |
-| Frontend | Vue 3 + Tailwind CSS |
-| Container | Docker |
-
-### Project Structure
-```
-DataCopilot/
-├── app/
-│   ├── main.py              # FastAPI entry point
-│   ├── config.py           # Pydantic settings
-│   ├── database.py         # SQLAlchemy engines with pooling
-│   ├── embeddings.py       # KB chunking & loading
-│   ├── jina_client.py     # Jina Embeddings API client
-│   ├── mcp_tools.py        # MCP tool implementations
-│   ├── mock_data.py        # Mock data generation
-│   ├── pii_masking.py       # PII protection
-│   ├── schema.sql          # DB schema + indexes
-│   ├── routes/
-│   │   ├── ask.py          # POST /ask endpoint
-│   │   └── tools.py        # Tool endpoints
-│   ├── static/
-│   │   └── index.html     # Vue 3 responsive frontend
-│   └── kb_docs/            # Knowledge base markdown files
-├── dbt/
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-└── bank/                   # uv virtual environment
-```
-
----
-
-## Part 2: MLOps Plan - Separated Containers Architecture
+## Architecture
 
 ### Architecture Diagram
 ```
@@ -78,7 +36,7 @@ DataCopilot/
 
 ---
 
-## Part 3: Implementation Steps
+## Implementation Steps
 
 ### Step 1: Add Prometheus Metrics Endpoint
 
@@ -183,7 +141,7 @@ prometheus-client>=0.17.0
 
 ---
 
-## Part 4: Monitoring Metrics to Track
+## Monitoring Metrics to Track
 
 ### App Metrics (from /metrics endpoint)
 | Metric | Type | Purpose |
@@ -207,7 +165,7 @@ prometheus-client>=0.17.0
 
 ---
 
-## Part 5: Alert Rules
+## Alert Rules
 
 | Alert | Condition | Action |
 |-------|-----------|--------|
@@ -218,7 +176,7 @@ prometheus-client>=0.17.0
 
 ---
 
-## Part 6: Files to Create/Modify
+## Files to Create/Modify
 
 | File | Action | Description |
 |------|--------|-------------|
@@ -233,7 +191,7 @@ prometheus-client>=0.17.0
 
 ---
 
-## Part 7: Testing the Stack
+## Testing the Stack
 
 ```bash
 # Start all services
@@ -254,7 +212,7 @@ curl http://localhost:8000/metrics
 
 ---
 
-## Part 8: CI/CD Pipeline
+## CI/CD Pipeline
 
 Create `.github/workflows/ci.yml`:
 ```yaml
@@ -301,7 +259,7 @@ jobs:
 
 ---
 
-## Part 9: Implementation Order
+## Implementation Order
 
 | Order | Task | Effort | Impact |
 |-------|------|--------|--------|
