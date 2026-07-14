@@ -14,7 +14,7 @@ CREATE TABLE customers (
 
 CREATE TABLE logins (
   id SERIAL PRIMARY KEY,
-  customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
   last_login TIMESTAMP,
   login_count INT
 );
@@ -27,16 +27,16 @@ CREATE TABLE products (
 
 CREATE TABLE customer_products (
   id SERIAL PRIMARY KEY,
-  customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
-  product_id INT REFERENCES products(id) ON DELETE CASCADE,
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  product_id INT REFERENCES products(id) ON DELETE SET NULL,
   enrolled_date DATE,
   status TEXT DEFAULT 'active'
 );
 
 CREATE TABLE transactions (
   id SERIAL PRIMARY KEY,
-  customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
-  product_id INT REFERENCES products(id) ON DELETE CASCADE,
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  product_id INT REFERENCES products(id) ON DELETE SET NULL,
   amount DECIMAL(12,2),
   type TEXT,
   method TEXT,
@@ -47,8 +47,8 @@ CREATE TABLE transactions (
 
 CREATE TABLE tickets (
   id SERIAL PRIMARY KEY,
-  customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
-  product_id INT REFERENCES products(id) ON DELETE CASCADE,
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  product_id INT REFERENCES products(id) ON DELETE SET NULL,
   category TEXT,
   issue TEXT,
   status TEXT,
@@ -61,7 +61,7 @@ CREATE TABLE tickets (
 
 CREATE TABLE escalations (
   id SERIAL PRIMARY KEY,
-  ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+  ticket_id INT REFERENCES tickets(id) ON DELETE SET NULL,
   escalated_to TEXT,
   reason TEXT,
   escalated_at TIMESTAMP,
@@ -98,5 +98,18 @@ CREATE INDEX IF NOT EXISTS idx_escalations_ticket_id ON escalations(ticket_id);
 -- pgvector index for cosine similarity search
 CREATE INDEX IF NOT EXISTS idx_kb_embeddings_embedding
 ON kb_embeddings USING ivfflat (embedding vector_cosine_ops);
+
+-- Request audit log
+CREATE TABLE IF NOT EXISTS request_logs (
+    id SERIAL PRIMARY KEY,
+    question TEXT,
+    tool_used TEXT,
+    latency_ms INT,
+    success BOOLEAN,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_created ON request_logs(created_at);
 
 

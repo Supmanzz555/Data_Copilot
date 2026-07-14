@@ -12,7 +12,7 @@ class TestSqlGuardrails(unittest.TestCase):
         self.assertEqual(_extract_sql_from_llm_output(raw), "SELECT * FROM customers;")
 
     def test_reject_non_read_queries(self):
-        from app.routes.ask import _is_read_query
+        from app.guardrails import is_read_query as _is_read_query
         self.assertFalse(_is_read_query("DELETE FROM customers WHERE id = 1"))
         self.assertTrue(_is_read_query("SELECT * FROM customers"))
         self.assertTrue(_is_read_query("WITH x AS (SELECT 1) SELECT * FROM x"))

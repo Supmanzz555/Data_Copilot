@@ -38,7 +38,7 @@ class TestPlanUpdatesOffline(unittest.IsolatedAsyncioTestCase):
         with open("app/schema.sql", "r", encoding="utf-8") as f:
             schema = f.read()
 
-        self.assertIn("ON DELETE CASCADE", schema)
+        self.assertIn("ON DELETE SET NULL", schema)
         self.assertIn("CREATE INDEX IF NOT EXISTS idx_tickets_customer_id", schema)
         self.assertIn("CREATE INDEX IF NOT EXISTS idx_logins_customer_id", schema)
         self.assertIn("CREATE INDEX IF NOT EXISTS idx_customer_products_customer_id", schema)
@@ -58,6 +58,9 @@ class TestPlanUpdatesOffline(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(resp.get("tool_used"), "conversational")
 
             blocked = await ask.ask_question(payload, request)
+            if hasattr(blocked, "body"):
+                import json as _json
+                blocked = _json.loads(blocked.body)
             self.assertEqual(blocked.get("error"), "rate_limit_exceeded")
 
         ask._request_log.clear()

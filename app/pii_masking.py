@@ -17,6 +17,14 @@ def mask_name(name: str) -> str:
     masked_parts = [p[0] + '***' if len(p) > 1 else '***' for p in parts]
     return ' '.join(masked_parts)
 
+def mask_phone(phone: str) -> str:
+    """Mask phone numbers: 081-234-5678 -> 081-***-****"""
+    if not phone:
+        return phone
+    if len(phone) >= 4:
+        return phone[:4] + '***-****'
+    return '***-****'
+
 def mask_pii_in_dict(data: dict) -> dict:
     """Recursively mask PII fields in a dictionary"""
     masked = {}
@@ -25,6 +33,8 @@ def mask_pii_in_dict(data: dict) -> dict:
             masked[key] = mask_email(str(value)) if value else value
         elif key in ['name', 'customer_name']:
             masked[key] = mask_name(str(value)) if value else value
+        elif key in ['phone', 'customer_phone']:
+            masked[key] = mask_phone(str(value)) if value else value
         elif isinstance(value, dict):
             masked[key] = mask_pii_in_dict(value)
         elif isinstance(value, list):

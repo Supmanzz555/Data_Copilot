@@ -2,13 +2,22 @@ from collections import defaultdict, deque
 import time
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from groq import Groq
+from sqlalchemy import text
 from app.mcp_tools import sql_query, kb_search, kpi_top_root_causes
 from app.config import settings
+from app.database import engine as sync_engine
+from app.metrics import REQUEST_COUNT, REQUEST_LATENCY, ACTIVE_REQUESTS, ERROR_COUNT
 from pydantic import BaseModel
 import asyncio
+import json
+import logging
 import re
+import sqlparse
+from app.guardrails import is_read_query
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 client = Groq(api_key=settings.GROQ_API_KEY)
 # define tools
@@ -43,19 +52,22 @@ async def _groq_chat_create_with_backoff(**kwargs):
             raise
     raise last_err or RuntimeError("Groq request failed after retries")
 
+def _strip_as_in_group_by(m: re.Match) -> str:
+    clause = m.group(1)
+    clause = re.sub(r"\bAS\s+\w+\s*,?\s*", ", ", clause)
+    clause = re.sub(r",\s*,", ",", clause).strip().rstrip(",")
+    return f"GROUP BY {clause}"
+
+
 def _sanitize_generated_sql(sql: str) -> str:
     """
     Patch common LLM SQL mistakes for this repo's schema without changing intent.
     Keep this conservative: only fix known, safe patterns.
     """
-    import re
-    
     fixed = sql
 
-    # GROUP BY cannot contain "AS alias"
-    fixed = re.sub(r"(\bGROUP\s+BY\b[^;]*?)\bAS\s+\w+", r"\1", fixed, flags=re.IGNORECASE)
-    # After stripping AS alias, clean up trailing comma before FROM/ORDER/LIMIT
-    fixed = re.sub(r",\s+(\n?\s*(?:FROM|ORDER\s+BY|LIMIT|HAVING))", r"\1", fixed, flags=re.IGNORECASE)
+    # GROUP BY cannot contain "AS alias" — strip all occurrences
+    fixed = re.sub(r"\bGROUP\s+BY\s+(.+?)(?=\s+(?:ORDER|LIMIT|HAVING|;|$)|$)", _strip_as_in_group_by, fixed, flags=re.IGNORECASE | re.DOTALL)
 
     # Fix alias typos by explicit scan
     result = []
@@ -122,12 +134,6 @@ def _extract_sql_from_llm_output(sql_response: str) -> str:
         candidate = re.sub(r"```.*?\n", "", sql_response)
         candidate = re.sub(r"```", "", candidate).strip()
     return candidate
-
-def _is_read_query(sql: str) -> bool:
-    """Allow only SELECT/WITH statements (matches sql_query guardrail)."""
-    upper = sql.strip().upper()
-    first = upper.split("--")[0].strip()
-    return first.startswith("SELECT") or first.startswith("WITH")
 
 def _friendly_sql_error(raw: str) -> str:
     """Return clearer message for common SQL generation failures."""
@@ -250,8 +256,6 @@ Example: "How many customers joined last year?" → I'll generate and execute th
 
 def generate_natural_response(question: str, data: any, tool_name: str, client, generated_sql: str = None) -> str:
     """Generate a natural language response from tool results"""
-    import json
-    
     # Build context for LLM
     context = f"""User asked: "{question}"
 
@@ -294,8 +298,7 @@ RULES:
         return response
     except Exception as e:
         #  fallback responses
-        import logging
-        logging.getLogger(__name__).warning(f"Natural response generation failed: {e}")
+        logger.warning(f"Natural response generation failed: {e}")
         
         if not data or (isinstance(data, list) and len(data) == 0):
             return "I couldn't find any matching data for that question. Try asking about our customers, tickets, or products!"
@@ -314,16 +317,38 @@ def select_tool_by_keywords(question: str):
     """Simple keyword-based tool selection as fallback"""
     q_lower = question.lower()
     
-    # Check for KPI/root cause keywords
-    if any(word in q_lower for word in ["top", "root cause", "category", "categories", "issue"]):
+    kpi_words = ["top", "root cause", "category", "categories", "issue", "kpi", "percentage", "distribution"]
+    if any(word in q_lower for word in kpi_words):
         return "kpi.top_root_causes", "Question asks about top root causes or categories"
     
-    # Check for KB/documentation keywords
-    if any(word in q_lower for word in ["what is", "tell me about", "explain", "policy", "documentation", "known issue"]):
+    kb_words = [
+        "what is", "what are", "tell me about", "explain", "policy", "policies",
+        "documentation", "known issue", "known issues", "how to", "how do i",
+        "troubleshoot", "guide", "manual", "feature", "product",
+    ]
+    if any(word in q_lower for word in kb_words):
         return "kb.search", "Question asks about documentation or policies"
     
-    # Default to SQL for data queries
+    sql_words = ["list", "show", "count", "how many", "how much", "total", "average",
+                 "find", "get", "give me", "what", "which", "when", "all"]
+    if any(word in q_lower for word in sql_words):
+        return "sql.query", "Question asks to query database"
+    
     return "sql.query", "Question asks about data (count, list, show, etc.)"
+
+async def _log_request(question: str, tool: str, latency_ms: int, success: bool, error_text: str | None = None):
+    def _insert():
+        with sync_engine.connect() as conn:
+            conn.execute(
+                text("INSERT INTO request_logs (question, tool_used, latency_ms, success, error) VALUES (:q, :t, :l, :s, :e)"),
+                {"q": question, "t": tool, "l": latency_ms, "s": success, "e": error_text},
+            )
+            conn.commit()
+    try:
+        await asyncio.to_thread(_insert)
+    except Exception as e:
+        logger.warning(f"Failed to log request: {e}")
+
 
 @router.post("/ask")
 async def ask_question(payload: AskPayload, request: Request):
@@ -333,15 +358,20 @@ async def ask_question(payload: AskPayload, request: Request):
     while window and now - window[0] > _RATE_LIMIT_WINDOW_SECONDS:
         window.popleft()
     if len(window) >= _RATE_LIMIT_MAX_REQUESTS:
-        return {
-            "error": "rate_limit_exceeded",
-            "tool_used": "rate_limiter",
-            "data": [],
-            "answer": "Too many requests. Please wait a minute before trying again.",
-            "message": "Rate limit exceeded (10 requests per minute).",
-        }
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "rate_limit_exceeded",
+                "tool_used": "rate_limiter",
+                "data": [],
+                "answer": "Too many requests. Please wait a minute before trying again.",
+                "message": "Rate limit exceeded (10 requests per minute).",
+            },
+        )
     window.append(now)
 
+    start_time = time.time()
+    ACTIVE_REQUESTS.inc()
     question = payload.question
     history = payload.history
 
@@ -413,9 +443,6 @@ CRITICAL RULES:
             temperature=0.3
         )).choices[0].message.content
 
-        import json
-        import re
-        
         # return json from response
         if "{" in llm_decision:
             json_start = llm_decision.index("{")
@@ -426,6 +453,11 @@ CRITICAL RULES:
         
         # LLm return normal chat reponse if it says just chat
         if decision.get("action") == "chat":
+            latency_ms = int((time.time() - start_time) * 1000)
+            ACTIVE_REQUESTS.dec()
+            REQUEST_COUNT.labels(tool="conversational").inc()
+            REQUEST_LATENCY.labels(tool="conversational").observe(latency_ms / 1000.0)
+            asyncio.create_task(_log_request(question, "conversational", latency_ms, True, None))
             return {
                 "tool_used": "conversational",
                 "answer": decision.get("response", "I'm here to help! What would you like to know?"),
@@ -437,14 +469,16 @@ CRITICAL RULES:
         reason = decision.get("reason", "LLM selected this tool")
         
     except Exception as e:
-        # check if obviously conversational
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(f"LLM decision failed, using fallback: {str(e)}")
         
         # for greetings
         if is_greeting_or_chat(question):
             response_text = get_conversational_response(question)
+            latency_ms = int((time.time() - start_time) * 1000)
+            ACTIVE_REQUESTS.dec()
+            REQUEST_COUNT.labels(tool="conversational").inc()
+            REQUEST_LATENCY.labels(tool="conversational").observe(latency_ms / 1000.0)
+            asyncio.create_task(_log_request(question, "conversational", latency_ms, True, None))
             return {
                 "tool_used": "conversational",
                 "answer": response_text,
@@ -568,7 +602,12 @@ Return ONLY the SQL query."""
             
             # gen the natural response
             answer = generate_natural_response(question, result, tool_name, client, generated_sql)
-            
+
+            latency_ms = int((time.time() - start_time) * 1000)
+            ACTIVE_REQUESTS.dec()
+            REQUEST_COUNT.labels(tool=tool_name).inc()
+            REQUEST_LATENCY.labels(tool=tool_name).observe(latency_ms / 1000.0)
+            asyncio.create_task(_log_request(question, tool_name, latency_ms, True, None))
             return {
                 "tool_used": tool_name,
                 "answer": answer,
@@ -582,7 +621,12 @@ Return ONLY the SQL query."""
             
             # gen the natural response
             answer = generate_natural_response(question, result, tool_name, client)
-            
+
+            latency_ms = int((time.time() - start_time) * 1000)
+            ACTIVE_REQUESTS.dec()
+            REQUEST_COUNT.labels(tool=tool_name).inc()
+            REQUEST_LATENCY.labels(tool=tool_name).observe(latency_ms / 1000.0)
+            asyncio.create_task(_log_request(question, tool_name, latency_ms, True, None))
             return {
                 "tool_used": tool_name,
                 "answer": answer,
@@ -599,6 +643,11 @@ Return ONLY the SQL query."""
             else:
                 answer = generate_natural_response(question, result, tool_name, client)
             
+            latency_ms = int((time.time() - start_time) * 1000)
+            ACTIVE_REQUESTS.dec()
+            REQUEST_COUNT.labels(tool=tool_name).inc()
+            REQUEST_LATENCY.labels(tool=tool_name).observe(latency_ms / 1000.0)
+            asyncio.create_task(_log_request(question, tool_name, latency_ms, True, None))
             return {
                 "tool_used": tool_name,
                 "answer": answer,
@@ -607,18 +656,23 @@ Return ONLY the SQL query."""
             }
         
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error executing tool {tool_name}: {str(e)}")
         
         answer_msg = f"Error: {str(e)}"
         if tool_name == "sql.query":
             answer_msg = _friendly_sql_error(str(e))
 
+        latency_ms = int((time.time() - start_time) * 1000)
+        ACTIVE_REQUESTS.dec()
+        REQUEST_COUNT.labels(tool=tool_name if tool_name else "unknown").inc()
+        REQUEST_LATENCY.labels(tool=tool_name if tool_name else "unknown").observe(latency_ms / 1000.0)
+        ERROR_COUNT.labels(type=type(e).__name__).inc()
+        asyncio.create_task(_log_request(question, tool_name if tool_name else "unknown", latency_ms, False, str(e)))
+
         error_response = {
             "error": str(e),
             "error_type": type(e).__name__,
-            "tool_used": tool_name,
+            "tool_used": tool_name if tool_name else "unknown",
             "data": [],
             "answer": answer_msg,
             "message": "An error occurred while processing your question."

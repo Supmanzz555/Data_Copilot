@@ -6,13 +6,27 @@
 - [x] Add database indexes on frequently queried columns
 - [x] Add config validation for required API keys
 - [x] Harden SQL generation reliability
-- [x] Update FK delete behavior with ON DELETE CASCADE
+- [x] Update FK delete behavior: CASCADE → SET NULL
 - [x] DB engine unification (sync + async)
 - [x] Improve embedding-path validation
 - [x] Remove hardcoded credentials defaults
 - [x] Add app health check in docker-compose
 - [x] Keep debug SQL logging disabled by default
 - [x] Upgrade to Pydantic v2
+
+### Security Hardening (June 2026)
+- [x] Multi-statement SQL guardrail using `sqlparse` (both ask.py and mcp_tools.py)
+- [x] Rate limit returns HTTP 429 instead of 200
+- [x] Phone field PII masking added
+- [x] CORS middleware added to main.py
+- [x] Created `__init__.py` for app/ and app/routes/
+- [x] Container runs as non-root `app` user
+- [x] Removed `--reload` flag from entrypoint.sh
+- [x] Lazy-init persistent engine in mcp_tools.py (no per-request dispose)
+- [x] Version-pinned all requirements with `<major+1` upper bounds
+- [x] Added `sqlparse` dependency, removed `dbt-core` (unused at runtime)
+- [x] Cleaned up Docker image (removed dbt/, init_db.py, test_system.py)
+- [x] Updated default DB password from `admin` to `changeme` in .env.example
 
 ### Frontend
 - [x] Vue 3 responsive frontend with dark mode
@@ -38,6 +52,21 @@
 - [x] DEVELOPMENT.md - Development guide
 - [x] ~~note.md~~ (deleted, was redundant with README)
 - [x] MLOPS_PLAN.md - MLOps implementation plan
+
+### MLOps Integration Tests
+- [x] `test_mlops.py` — 28 tests covering: metrics endpoint, SQL query, conversational, KPI, KB search, error handling, rate limiting (429), multi-statement guardrail, tools endpoint, direct SQL, metrics consistency, request logs table
+
+### Nice-to-Have Cleanup (July 2026)
+- [x] Extracted shared `is_read_query` into `app/guardrails.py` (removed duplicate from ask.py + mcp_tools.py)
+- [x] Deleted dead `app/db.py` (4 lines, never imported)
+- [x] Added `.dockerignore` (excludes .git, __pycache__, .env, tests)
+- [x] Fixed static mount path (use `os.path.dirname(__file__)` instead of relative)
+- [x] Reused `httpx.Client` in jina_client.py (module-level instead of per-call)
+- [x] `kb_search` LIMIT 5 → 3 (removed wasteful slice)
+- [x] Expanded keyword fallback in `select_tool_by_keywords` (added kpi, percentage, how to, troubleshoot etc.)
+- [x] Removed 500-char truncation in `_log_request`
+- [x] Added `/health` endpoint (lightweight, updated docker healthcheck)
+- [x] Removed hardcoded DB password default (fails fast if unset)
 
 ### Data & Mock Data Enrichment
 - [x] Added customer demographics (age, income, occupation, phone)

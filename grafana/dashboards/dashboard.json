@@ -1,0 +1,104 @@
+{
+  "title": "DataCopilot Overview",
+  "uid": "datacopilot-overview",
+  "schemaVersion": 36,
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Request Rate (per tool)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "showPoints": "never", "lineInterpolation": "smooth" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(datacopilot_requests_total[5m])",
+          "legendFormat": "{{tool}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Error Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "showPoints": "never", "lineInterpolation": "smooth" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(datacopilot_errors_total[5m])",
+          "legendFormat": "{{type}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "title": "Active Requests",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 10,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 8 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "datacopilot_active_requests"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 8 }
+    },
+    {
+      "title": "Request Latency (P95)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "showPoints": "never", "lineInterpolation": "smooth" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(datacopilot_request_latency_seconds_bucket[5m]))",
+          "legendFormat": "{{tool}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 }
+    },
+    {
+      "title": "Total Requests",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "purple" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(datacopilot_requests_total)"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 }
+    }
+  ]
+}

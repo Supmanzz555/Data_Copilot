@@ -12,6 +12,15 @@ import httpx
 
 from app.config import settings
 
+_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    global _client
+    if _client is None:
+        _client = httpx.Client(timeout=120.0)
+    return _client
+
 
 def _request_payload(texts: Sequence[str], *, task: str | None) -> dict:
     body: dict = {
@@ -41,10 +50,10 @@ def embed_texts_sync(texts: list[str], *, task: str | None = None) -> list[list[
     }
     url = settings.JINA_EMBEDDINGS_API_URL.rstrip("/")
 
-    with httpx.Client(timeout=120.0) as client:
-        resp = client.post(url, json=_request_payload(texts, task=task), headers=headers)
-        resp.raise_for_status()
-        payload = resp.json()
+    client = _get_client()
+    resp = client.post(url, json=_request_payload(texts, task=task), headers=headers)
+    resp.raise_for_status()
+    payload = resp.json()
 
     items = payload.get("data") or []
     items.sort(key=lambda x: x.get("index", 0))

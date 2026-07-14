@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, indev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest test_plan_updates_unit.py -v
+          pytest test_frontend.py -v
+
+      - name: Run SQL guardrail tests
+        run: pytest test_sql_guardrails.py -v
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Security scan
+        run: |
+          pip install bandit safety
+          bandit -r app/
+          safety check
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker
+        run: docker compose build app

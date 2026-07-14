@@ -8,166 +8,197 @@ Fix the highest-impact reliability, performance, and security issues with a safe
 ## Tasks
 
 ### 1. Add Database Indexes
-**Priority**: HIGH
+**Priority**: HIGH — ✅ Done
 
-Add to `app/schema.sql`:
-
-```sql
--- Indexes for tickets table
-CREATE INDEX idx_tickets_customer_id ON tickets(customer_id);
-CREATE INDEX idx_tickets_product_id ON tickets(product_id);
-CREATE INDEX idx_tickets_status ON tickets(status);
-CREATE INDEX idx_tickets_created_at ON tickets(created_at);
-CREATE INDEX idx_tickets_app_version ON tickets(app_version);
-
--- Indexes for logins table
-CREATE INDEX idx_logins_customer_id ON logins(customer_id);
-
--- Indexes for customer_products table
-CREATE INDEX idx_customer_products_customer_id ON customer_products(customer_id);
-CREATE INDEX idx_customer_products_product_id ON customer_products(product_id);
-CREATE INDEX idx_customer_products_status ON customer_products(status);
-
--- Indexes for kb_embeddings (vector search)
-CREATE INDEX idx_kb_embeddings_embedding ON kb_embeddings USING ivfflat (embedding vector_cosine_ops);
-```
+Indexes added to `app/schema.sql` for tickets, logins, customer_products, transactions, escalations, and pgvector ivfflat.
 
 ---
 
 ### 2. Config Validation for Required API Keys
-**Priority**: HIGH
+**Priority**: HIGH — ✅ Done
 
-Add startup/config validation so app fails fast with a clear message when required keys are missing.
-
-Implementation guidance:
-- Keep current Pydantic v2 style.
-- Validate both `GROQ_API_KEY` and `JINA_API_KEY`.
-- Prefer startup/runtime validation if you want clearer operational errors.
+Startup validation in `app/main.py` checks `GROQ_API_KEY`, `JINA_API_KEY`, `DATABASE_URL` and fails fast with clear message.
 
 ---
 
 ### 3. SQL Generation Reliability Hardening
-**Priority**: HIGH
+**Priority**: HIGH — ✅ Done
 
-Improve NL->SQL robustness in `app/routes/ask.py`:
-- Strengthen schema prompt constraints (exact table/column names and join keys).
-- Keep and extend sanitizer for known bad patterns (alias mismatch, invalid group-by aliasing, hallucinated columns).
-- Return friendly errors for malformed SQL.
-- Add tests for common query intents and known failure cases.
+Enhanced schema prompts, alias-mismatch sanitizer, hallucinated-column fixes, friendly SQL error messages.
 
 ---
 
-### 4. Foreign Key Policy Cleanup (No Duplicate Constraints)
-**Priority**: MEDIUM
+### 4. Foreign Key Policy (CASCADE → SET NULL)
+**Priority**: HIGH — ✅ Done
 
-`app/schema.sql` already defines foreign keys inline (`REFERENCES ...`).
-Do NOT add duplicate `ALTER TABLE ... ADD CONSTRAINT` for the same relationships.
-
-If cascade delete is desired, update existing FK definitions in table creation, for example:
-
-```sql
-customer_id INT REFERENCES customers(id) ON DELETE CASCADE
-```
+All FK `ON DELETE CASCADE` changed to `ON DELETE SET NULL` in `app/schema.sql` to prevent accidental cascading deletes.
 
 ---
 
-### 5. Unified Database Engine Module (Optional Refactor)
-**Priority**: MEDIUM
+### 5. Multi-Statement SQL Guardrail
+**Priority**: HIGH — ✅ Done
 
-Only do this after Tasks 1-4 are stable.
-Unify sync/async engine creation in one module to reduce duplication.
-
-Potential target:
-- `app/database.py` containing sync and async engine/session factories.
-- Consume from `app/db.py`, `app/mcp_tools.py`, `app/embeddings.py`, `app/mock_data.py`.
+Added `sqlparse` library to verify single SELECT/WITH statements. Applied in both `app/routes/ask.py:_is_read_query` and `app/mcp_tools.py:_is_read_query` for defense-in-depth.
 
 ---
 
-### 6. Embedding Path Validation and Fallback Quality
-**Priority**: MEDIUM
+### 6. Rate Limit Returns HTTP 429
+**Priority**: HIGH — ✅ Done
 
-Prefer simple, reliable checks over regex on stringified vectors:
-- Enforce vector length equals `JINA_EMBEDDING_DIMENSION`.
-- Handle Jina API and vector-cast failures cleanly.
-- Keep text-search fallback path healthy and observable.
+Rate-limited `/ask` requests now return HTTP 429 (was 200) with `JSONResponse`.
 
 ---
 
-### 7. Remove Hardcoded Credentials
+### 7. PII Masking — Phone Field
+**Priority**: HIGH — ✅ Done
+
+Added `mask_phone()` function and `"phone"`/`"customer_phone"` keys to `app/pii_masking.py`. Phone numbers are now masked in query results.
+
+---
+
+### 8. CORS Middleware
+**Priority**: HIGH — ✅ Done
+
+Added `CORSMiddleware` to `app/main.py` (allow all origins for local dev).
+
+---
+
+### 9. Docker Security Hardening
+**Priority**: HIGH — ✅ Done
+
+- Container runs as non-root `app` user (uid 1000)
+- Removed `--reload` from `entrypoint.sh`
+- Removed `dbt/`, `init_db.py`, `test_system.py` from Docker image
+- Added `PYTHONDONTWRITEBYTECODE` and `PYTHONUNBUFFERED` env vars
+
+---
+
+### 10. Connection Pooling (Engine Reuse)
+**Priority**: HIGH — ✅ Done
+
+`app/mcp_tools.py` now lazy-initializes and reuses a single `AsyncEngine` instead of creating/disposing one per request.
+
+---
+
+### 11. Requirements Version Pinning
+**Priority**: HIGH — ✅ Done
+
+All dependencies pinned with `>=x,<y` ranges in `requirements.txt`. Added `sqlparse`. Removed `dbt-core` (unused at runtime, saves ~100MB in image).
+
+---
+
+### 12. Default Credentials
+**Priority**: HIGH — ✅ Done
+
+Default DB password changed from `admin` to `changeme` in `.env.example`.
+
+---
+
+### 13. CORS Fix
+**Priority**: HIGH — ✅ Done
+
+Removed `allow_credentials=True` (incompatible with `allow_origins=["*"]`).
+
+---
+
+### 14. Phone Masking Fix
+**Priority**: HIGH — ✅ Done
+
+`mask_phone` now fully masks (e.g. `081-***-****` instead of leaking last 4 digits).
+
+---
+
+### 15. Audit Log Visibility
+**Priority**: HIGH — ✅ Done
+
+`_log_request` failures now log a warning instead of silent `pass`. Removed 500-char truncation.
+
+---
+
+### 16. GROUP BY AS Alias Fix
+**Priority**: HIGH — ✅ Done
+
+Regex rewritten to handle multi-column GROUP BY clauses correctly without consuming trailing ORDER BY.
+
+---
+
+### 17. Schema Test Fix
+**Priority**: HIGH — ✅ Done
+
+Test asserts `ON DELETE SET NULL` (matches actual schema).
+
+---
+
+### 18. CI Coverage Expanded
+**Priority**: MEDIUM — ✅ Done
+
+CI now runs `test_plan_updates_unit.py`, `test_frontend.py`, and `test_sql_guardrails.py` (was 1 of 5).
+
+---
+
+### 19. Multi-Worker Uvicorn
+**Priority**: MEDIUM — ✅ Done
+
+Added `--workers 4` to uvicorn in `entrypoint.sh`.
+
+---
+
+### 20. Shared Guardrails Module
+**Priority**: LOW — ✅ Done
+
+Extracted `is_read_query` into `app/guardrails.py`, imported by both `ask.py` and `mcp_tools.py`.
+
+---
+
+### 21. Dead Code Removal
+**Priority**: LOW — ✅ Done
+
+Deleted unused `app/db.py`. Added `.dockerignore`.
+
+---
+
+### 22. Static Path Fix
+**Priority**: LOW — ✅ Done
+
+Static mount now uses `os.path.dirname(__file__)` instead of relative path.
+
+---
+
+### 23. HTTP Client Reuse
+**Priority**: LOW — ✅ Done
+
+Module-level `httpx.Client` in `jina_client.py` instead of per-call creation.
+
+---
+
+### 24. /health Endpoint
+**Priority**: LOW — ✅ Done
+
+Added lightweight `/health` endpoint. Docker healthcheck updated to use it.
+
+---
+
+### 25. db Engine Cleanup
+**Priority**: LOW — ✅ Done
+
+Removed unused async engine from `database.py`. `mcp_tools.py` owns the single pooled engine.
+
+---
+
+### 26. dbt Execution Strategy
 **Priority**: LOW
 
-In `app/config.py`, defaults should come from `.env` only where practical.
-
-Update `docker-compose.yml`:
-
-```yaml
-services:
-  db:
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-      POSTGRES_DB: ${POSTGRES_DB:-deep_insights}
-```
+Avoid running dbt automatically on API startup. Run dbt in CI/CD or a separate one-shot job/container.
 
 ---
 
-### 8. Add Health Check for App in docker-compose
-**Priority**: LOW
-
-Update `docker-compose.yml`:
-
-```yaml
-services:
-  app:
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-```
-
----
-
-### 9. dbt Execution Strategy
-**Priority**: LOW
-
-Avoid running dbt automatically on API startup.
-
-Preferred approach:
-- Run dbt in CI/CD or a separate one-shot job/container.
-- Keep app boot fast and independent of dbt runtime failures.
-
----
-
-### 10. Add Rate Limiting on /ask Endpoint
-**Priority**: LOW
-
-Add request limiting for basic abuse protection.
-
----
-
-### 11. Production Logging Defaults
+### 27. Production Logging Defaults
 **Priority**: LOW
 
 Keep debug SQL logging disabled by default in production.
-Enable only when explicitly requested via env/config.
-
----
-
-### 12. Upgrade to Pydantic v2
-**Priority**: LOW
-
-Treat as a separate migration milestone with dedicated compatibility tests.
-Do not combine with reliability hotfix tasks.
 
 ---
 
 ## Execution Order
-1. Task 1 (Indexes)
-2. Task 2 (Config validation)
-3. Task 3 (SQL generation reliability)
-4. Task 4 (FK policy cleanup without duplicates)
-5. Task 5 (Optional unified DB refactor)
-6. Task 6 (Embedding-path validation and fallback quality)
-7. Tasks 7-12 (low-priority hardening and maintenance)
+1. ✅ Tasks 1-25 (Production hardening, MLOps, CI/CD)
+2. ⬜ Tasks 26-27 (Low-priority maintenance)
