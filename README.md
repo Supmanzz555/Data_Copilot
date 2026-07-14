@@ -1,218 +1,128 @@
 # DataCopilot
 
-> AI-powered chat copilot that answers natural-language questions about your data using SQL and knowledge base search.
+AI chat copilot that turns natural language questions into SQL and knowledge-base lookups.
 
-## Overview
+## Quick Start
 
-DataCopilot is an intelligent system that allows business users to query a database and documentation using natural language, without writing SQL. It leverages LLM (Groq) for natural language understanding and PostgreSQL + pgvector for data storage and semantic search.
+```bash
+cp .env.example .env   # add your Groq + Jina API keys
+docker compose up --build
+open http://localhost:8000
+```
 
-**Note**: This project uses mock data for demonstration purposes.
-
----
-
-## Features
-
-### Core Features
-- **Natural Language to SQL** - Convert plain English questions into executable SQL queries
-- **Knowledge Base Search** - Semantic search over documentation using embeddings
-- **KPI Analytics** - Pre-built queries for common metrics (top root causes, etc.)
-- **Rate Limiting** - 10 requests per minute to prevent abuse
-
-### Security Features
-- **Read-only Database** - Only SELECT/WITH queries allowed
-- **PII Masking** - Automatically masks emails and customer names
-- **SQL Sanitization** - Fixes common LLM-generated SQL mistakes
-- **Request Validation** - Config validation at startup
-
-### UI Features
-- **Modern Vue 3 Interface** - Clean, responsive chat UI
-- **Dark Mode** - Toggle between light and dark themes
-- **Data Visualization** - Results displayed in formatted tables
-- **SQL Preview** - Shows generated SQL before execution
-- **Animations** - Smooth message animations and loading states
-
----
+### Questions to try
+- "How many customers do we have?"
+- "Total transaction value by payment method"
+- "Top 5 root causes of issues"
+- "What is Digital Lending?"
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Backend** | FastAPI + Python | REST API server |
-| **Database** | PostgreSQL 18 + pgvector | Relational DB + vector store |
-| **LLM** | Groq (llama-3.3-70b-versatile) | Natural language understanding |
-| **Embeddings** | Jina AI (jina-embeddings-v3) | Document vectorization |
-| **Frontend** | Vue 3 + Tailwind CSS | Responsive chat interface |
-| **Container** | Docker + Docker Compose | Deployment |
+| Layer | What |
+|-------|------|
+| Backend | FastAPI (Python 3.11) |
+| Database | PostgreSQL 18 + pgvector |
+| LLM | Groq (llama-3.3-70b-versatile) |
+| Embeddings | Jina AI (jina-embeddings-v3) |
+| Frontend | Vue 3 + Tailwind CSS |
+| Container | Docker + Docker Compose |
 
----
+## API
+
+| Endpoint | What it does |
+|----------|-------------|
+| `GET /` | Chat UI |
+| `POST /ask` | Ask a question in natural language |
+| `GET /tools/list` | List available tools |
+| `POST /tools/call` | Call a tool directly |
+| `GET /metrics` | Prometheus metrics |
+| `GET /health` | Health check |
+
+## Run Modes
+
+```bash
+# Core only (app + db):
+docker compose up --build
+
+# Full stack (app + db + Prometheus + Grafana + Uptime Kuma):
+docker compose --profile monitoring up --build
+```
+
+## Tests
+
+```bash
+bank/bin/python -m pytest test_plan_updates_unit.py test_frontend.py test_sql_guardrails.py -v
+python test_mlops.py  # requires running app
+```
 
 ## Project Structure
 
 ```
 DataCopilot/
 ├── app/
-│   ├── main.py              # FastAPI application entry point
-│   ├── config.py           # Pydantic settings (API keys, config)
-│   ├── database.py         # SQLAlchemy engines with connection pooling
-│   ├── db.py               # Legacy DB module (imports from database.py)
-│   ├── embeddings.py       # Knowledge base chunking & loading
-│   ├── jina_client.py      # Jina Embeddings API client
-│   ├── mcp_tools.py        # Database query tools (sql_query, kb_search, etc.)
-│   ├── mock_data.py        # Mock data generation
-│   ├── pii_masking.py      # PII protection functions
-│   ├── schema.sql         # Database schema + indexes + FK
+│   ├── main.py              # Entry point (+ /health, CORS, metrics)
+│   ├── config.py            # Pydantic settings
+│   ├── database.py          # DB engines (connection pooling)
+│   ├── embeddings.py        # KB chunking & pgvector loading
+│   ├── guardrails.py        # Shared SQL guardrail
+│   ├── jina_client.py       # Jina Embeddings client
+│   ├── metrics.py           # Prometheus metrics
+│   ├── mcp_tools.py         # Tool implementations
+│   ├── mock_data.py         # Mock data generator
+│   ├── pii_masking.py       # PII protection
+│   ├── schema.sql           # Schema + indexes + FKs
 │   ├── routes/
-│   │   ├── ask.py         # POST /ask endpoint
-│   │   └── tools.py       # Tool listing endpoints
-│   ├── static/
-│   │   └── index.html     # Vue 3 frontend (responsive)
-│   └── kb_docs/           # Knowledge base markdown files
-├── dbt/
-│   ├── models/            # dbt transformation models
-│   └── tests/             # dbt tests
-├── docker-compose.yml    # Container orchestration
-├── Dockerfile            # App container image
-├── requirements.txt       # Python dependencies
-└── bank/                 # Virtual environment (uv)
+│   │   ├── ask.py           # POST /ask (rate limited, logged)
+│   │   └── tools.py         # Tool endpoints
+│   ├── static/              # Vue 3 frontend
+│   └── kb_docs/             # Knowledge base files
+├── grafana/                 # Provisioned dashboards
+├── .github/workflows/ci.yml # CI pipeline
+├── docker-compose.yml       # Profiles for monitoring stack
+├── Dockerfile               # Non-root app user
+├── prometheus.yml           # Scrape config
+├── test_mlops.py            # 28 MLOps integration tests
+└── requirements.txt         # Version-pinned deps
 ```
 
----
+## Monitoring (MLOps)
 
-## API Endpoints
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Prometheus | http://localhost:9090 | Metrics store |
+| Grafana | http://localhost:3000 | Dashboards (admin/admin) |
+| Uptime Kuma | http://localhost:3001 | Uptime monitoring |
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Web UI |
-| `/ask` | POST | Ask a question in natural language |
-| `/tools/list` | GET | List available MCP tools |
-| `/tools/call` | POST | Call a specific tool |
+Uses `docker compose --profile monitoring up -d` to start all.
 
-### Example: Ask a Question
+## Database Tables
 
-```bash
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Top 5 root causes of issues"}'
-```
+| Table | Purpose |
+|-------|---------|
+| `customers` | Customer data (name, email, region, age, income, phone) |
+| `products` | Product catalog |
+| `customer_products` | Customer-product enrollments |
+| `logins` | Login history |
+| `transactions` | Financial transactions |
+| `tickets` | Support tickets with realistic issues |
+| `escalations` | Ticket escalation tracking |
+| `kb_embeddings` | Vector store (pgvector) |
+| `request_logs` | Audit log of all /ask requests |
 
-```json
-{
-  "tool_used": "kpi.top_root_causes",
-  "answer": "The top 5 root causes are...",
-  "data": [
-    {"category": "App Crash", "count": 45, "percentage": 32.14}
-  ]
-}
-```
+## Security
 
----
+- Read-only SQL (single SELECT/WITH enforced by sqlparse)
+- PII masking (email, name, phone)
+- Rate limiting (10/min, HTTP 429)
+- Multi-statement guardrail
+- Non-root container user
+- Config validation on startup
 
-## MCP Tools
+## CI/CD
 
-| Tool | Description |
-|------|-------------|
-| `sql.query` | Execute read-only SQL queries |
-| `kb.search` | Semantic search over knowledge base |
-| `kpi.top_root_causes` | Top 5 issue categories with percentages |
+GitHub Actions runs on push to `main`/`indev`:
+- **test** — 3 test suites (82 tests)
+- **security** — bandit + safety scan
+- **docker** — verifies image builds
 
----
-
-## Getting Started
-
-### Prerequisites
-- Docker & Docker Compose
-- Groq API key (https://console.groq.com)
-- Jina API key (https://jina.ai/embeddings)
-
-### Quick Start
-
-```bash
-# Clone and configure
-cd DataCopilot
-cp .env.example .env
-# Edit .env with your API keys
-
-# Start
-docker-compose up --build
-
-# Access
-open http://localhost:8000
-```
-
-### Example Questions to Try
-- "How many customers do we have?"
-- "Total transaction value by payment method"
-- "Average customer age"
-- "Top 5 root causes of issues"
-- "Show me all products"
-- "What is Digital Lending?"
-- "Tickets after v1.2 release"
-- "Escalations sent to Engineering"
-
----
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `GROQ_API_KEY` | Yes | - | Groq API key for LLM |
-| `JINA_API_KEY` | Yes | - | Jina API key for embeddings |
-| `DEBUG` | No | `false` | Enable SQL debug logging |
-
----
-
-## Database Schema
-
-### Tables
-- `customers` - Customer data (name, email, region, age, income, occupation)
-- `products` - Product catalog
-- `customer_products` - Customer-product relationships
-- `logins` - Customer login tracking
-- `transactions` - Financial transactions (amount, type, method, status)
-- `tickets` - Support tickets with realistic issue descriptions
-- `escalations` - Ticket escalation tracking
-- `kb_embeddings` - Vector store for knowledge base
-
-### Performance Indexes
-- `idx_tickets_customer_id`, `idx_tickets_product_id`, `idx_tickets_status`
-- `idx_logins_customer_id`
-- `idx_customer_products_*`
-- `idx_transactions_customer_id`, `idx_transactions_created_at`
-- `idx_escalations_ticket_id`
-- `idx_kb_embeddings_embedding` (pgvector)
-
----
-
-## Running Tests
-
-```bash
-# Activate virtual environment
-source bank/bin/activate
-
-# Run all tests
-pytest test_frontend.py test_sql_guardrails.py test_plan_updates_unit.py -v
-```
-
----
-
-## Documentation Files
-
-| File | Description |
-|------|-------------|
-| `README.md` | This overview |
-| `DEVELOPMENT.md` | Development guide and maintenance |
-| `PLAN.md` | Implementation plan |
-| `TODO.md` | Completed tasks and planned enhancements |
-
----
-
-## Future Improvements
-
-See [TODO.md](./TODO.md) for planned enhancements.
-
----
-
-*Last updated: May 2026*
+*Uses mock data for demonstration.*
