@@ -52,6 +52,12 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
+# Docs (keep local, don't push)
+DEVELOPMENT.md
+MLOPS_PLAN.md
+PLAN.md
+TODO.md
+
 # Logs
 *.log
 
