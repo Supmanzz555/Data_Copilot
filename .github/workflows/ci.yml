@@ -44,3 +44,6 @@ jobs:
 
       - name: Build Docker
         run: docker compose build app
+        env:
+          POSTGRES_PASSWORD: ci
+          DATABASE_URL: postgresql://admin:ci@db:5432/deep_insights
