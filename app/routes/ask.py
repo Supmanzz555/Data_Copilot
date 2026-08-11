@@ -595,7 +595,7 @@ Return ONLY the SQL query."""
             generated_sql = generated_sql.replace("t.customer,", "t.customer_id,")
 
             generated_sql = _sanitize_generated_sql(generated_sql)
-            if not _is_read_query(generated_sql):
+            if not is_read_query(generated_sql):
                 raise ValueError("Generated query is not read-only (SELECT/WITH only).")
             
             result = await sql_query(generated_sql)

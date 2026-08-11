@@ -38,7 +38,7 @@ async def sql_query(query: str, params: dict = None):
     query_upper = query_clean.upper()
     query_upper_no_comments = query_upper.split("--")[0].strip()
     
-    if not _is_read_query(query_clean):
+    if not is_read_query(query_clean):
         logger.error(f"Non-SELECT query attempted: {query_clean[:100]}")
         raise ValueError("Only SELECT queries are allowed")
     
